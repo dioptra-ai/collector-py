@@ -45,3 +45,4 @@ $ python3 examples/image_classification.py
 ```
 
 And log in to the dioptra app to see what happens :)
+
