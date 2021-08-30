@@ -1,6 +1,4 @@
-<div align="center">
-  <img src="https://dioptra-resources.s3.us-east-2.amazonaws.com/public_assets/dioptra/images/dioptra_logo.png" width="600" /><br><br>
-</div>
+
 
 ---
 
