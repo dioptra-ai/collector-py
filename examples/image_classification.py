@@ -1,3 +1,4 @@
+import os
 import argparse
 import uuid
 import datetime
@@ -10,12 +11,13 @@ from image_classifier_generator import (
 
 from dioptra.api import Logger
 
-API_KEY = '4gHEEZD5pA9yHXHiSZi5w1pMr8u8bGn53VBYkza6'
+API_KEY = os.environ.get('DIOPTRA_API_KEY')
+ENDPOINT_URL = 'https://gze1mtwpp7.execute-api.us-east-2.amazonaws.com/demo'
 NUMBER_OF_EVENTS = 10000
 
 def main(args):
 
-    dioptra_logger = Logger(api_key=API_KEY)
+    dioptra_logger = Logger(api_key=API_KEY, endpoint_url=ENDPOINT_URL)
 
     model_id = 'document_classification'
     model_version = 'v1.1'
@@ -30,6 +32,7 @@ def main(args):
         generated_groundtruth = generate_groundtruth(image_index)
 
         # After a prediction we log the prediction, features and tags
+        print('Sending a datapoint')
         dioptra_logger.log(
             model_id=model_id,
             model_version=model_version,
@@ -43,6 +46,7 @@ def main(args):
             tags=generated_datapoint['request_tags'])
 
         # We can log the groundtruth asynchronously
+        print('Sending a groundtruth')
         dioptra_logger.log(
             request_id=request_uuid,
             groundtruth=generated_groundtruth)

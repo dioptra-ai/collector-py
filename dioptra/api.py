@@ -23,11 +23,11 @@ class Logger:
     def __init__(
         self,
         api_key,
-        endpoint_url='https://jchf4wca8i.execute-api.us-east-2.amazonaws.com/demo/test'
+        endpoint_url
     ):
         self.api_key = api_key
         self.endpoint_url = endpoint_url
-        self.event_url = endpoint_url + '/event'
+        self.event_url = endpoint_url + '/events'
         self._headers = {
             "x-api-key": api_key,
             "Content-Type": "application/json"
@@ -65,7 +65,7 @@ class Logger:
         client = Client()
         my_response = client.call(
             payload=payload,
-            endpoint_url=self.endpoint_url,
+            endpoint_url=self.event_url,
             headers=self._headers)
 
         return my_response
@@ -121,4 +121,4 @@ class Logger:
             prefixed_tags = add_prefix_to_keys(tags, 'tag')
             payload.update(prefixed_tags)
 
-        return payload
+        return [payload]
