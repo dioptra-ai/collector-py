@@ -36,6 +36,7 @@ class Logger:
     def log(
         self,
         request_id,
+        timestamp=None,
         model_id=None,
         model_version=None,
         groundtruth=None,
@@ -44,8 +45,7 @@ class Logger:
         features=None,
         embeddings=None,
         image_url=None,
-        tags=None,
-        timestamp=datetime.datetime.utcnow().isoformat()
+        tags=None
     ):
 
         payload = self.package_payload(
@@ -95,8 +95,10 @@ class Logger:
         if model_version:
             payload['model_version'] = model_version
 
-        if validate_timestamp(groundtruth):
+        if timestamp and validate_timestamp(timestamp):
             payload['timestamp'] = timestamp
+        else:
+            payload['timestamp'] = datetime.datetime.utcnow().isoformat()
 
         if groundtruth and validate_groundtruth(groundtruth):
             payload['groundtruth'] = groundtruth
@@ -115,7 +117,7 @@ class Logger:
             payload['feature.image_url'] = image_url
 
         if embeddings and validate_embeddings(embeddings):
-            payload['feature.embeddings'] = embeddings
+            payload['feature.embeddings'] = json.dumps(embeddings)
 
         if tags and validate_tags(tags):
             prefixed_tags = add_prefix_to_keys(tags, 'tag')
