@@ -23,13 +23,7 @@ When you create an account, we generate a service API key.
 
 
 ### Install Library
-
-Install the Dioptra library in an environment using Python > 3.5.3.
-```sh
-$ pip3 install dioptra
-```
-
-Or clone the repo:
+Clone the repo:
 ```sh
 $ git clone https://github.com/dioptra-ai/collector-py.git
 $ python3 setup.py install
