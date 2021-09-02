@@ -8,7 +8,6 @@ import datetime
 from dioptra.api import Logger
 
 API_KEY = os.environ.get('DIOPTRA_API_KEY')
-ENDPOINT_URL = 'https://gze1mtwpp7.execute-api.us-east-2.amazonaws.com/demo'
 NUMBER_OF_EVENTS = 10000
 
 
@@ -43,7 +42,7 @@ def main():
 
     config = load_config()
 
-    dioptra_logger = Logger(api_key=API_KEY, endpoint_url=ENDPOINT_URL)
+    dioptra_logger = Logger(api_key=API_KEY)
 
     model_id = 'document_classification'
     model_version = 'v1.1'

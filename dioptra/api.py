@@ -23,14 +23,14 @@ class Logger:
     def __init__(
         self,
         api_key,
-        endpoint_url
+        endpoint_url='https://api.dioptra.ai/demo'
     ):
         self.api_key = api_key
         self.endpoint_url = endpoint_url
         self.event_url = endpoint_url + '/events'
         self._headers = {
-            "x-api-key": api_key,
-            "Content-Type": "application/json"
+            'x-api-key': api_key,
+            'Content-Type': 'application/json'
         }
 
     def log(
