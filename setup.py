@@ -21,6 +21,7 @@ if sys.version_info < (3, 5, 3):
     sys.exit('Sorry, Python < 3.5.3 is not supported')
 
 long_description = read('README.md')
+requirements = read('requirements.txt').splitlines()
 
 __version__ = get_version('dioptra/__init__.py')
 
@@ -48,5 +49,6 @@ setup(
     ],
     keywords='dioptra',
     packages=find_packages(exclude=['docs', 'tests*', 'examples']),
-    include_package_data=True
+    include_package_data=True,
+    install_requires=requirements
 )

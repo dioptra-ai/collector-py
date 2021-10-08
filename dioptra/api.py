@@ -1,5 +1,8 @@
+import base64
 import datetime
-import json
+
+import lz4.frame
+import numpy as np
 
 from dioptra.client import Client
 from dioptra.utils import (
@@ -117,7 +120,11 @@ class Logger:
             payload['feature.image_url'] = image_url
 
         if embeddings and validate_embeddings(embeddings):
-            payload['feature.embeddings'] = json.dumps(embeddings)
+            payload['feature.embeddings'] = base64.b64encode(
+                lz4.frame.compress(
+                    np.array(embeddings).astype(dtype=np.float16).tobytes(),
+                    compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
+                )).decode('ascii')
 
         if tags and validate_tags(tags):
             prefixed_tags = add_prefix_to_keys(tags, 'tag')
