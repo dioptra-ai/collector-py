@@ -29,12 +29,14 @@ def get_datapoint(config):
     image_index = int(random.random() * (len(config['images'])))
 
     return {
-        'request_tags': config['images'][image_index]['tags'],
-        'model_prediction': config['images'][image_index]['prediction'],
-        'model_confidence': config['images'][image_index]['confidence'],
-        'image_url': config['images'][image_index]['url'],
-        'image_embeddings': config['images'][image_index]['embeddings'],
-        'image_features': config['images'][image_index]['features'],
+        'tags': config['images'][image_index]['tags'],
+        'prediction': config['images'][image_index]['prediction'],
+        'confidence': config['images'][image_index]['confidence'],
+        'embeddings': config['images'][image_index]['embeddings'],
+        'image_metadata': {
+            'uri': config['images'][image_index]['url'],
+            'rotation': config['images'][image_index]['features']['rotation']
+        },
         'groundtruth': config['images'][image_index]['class']
     }
 
@@ -61,16 +63,15 @@ def main():
             model_version=model_version,
             timestamp=request_timestamp,
             request_id=request_uuid,
-            prediction=datapoint['model_prediction'],
-            confidence=datapoint['model_confidence'],
-            features=datapoint['image_features'],
-            embeddings=datapoint['image_embeddings'],
-            image_url=datapoint['image_url'],
-            tags=datapoint['request_tags'])
+            prediction=datapoint['prediction'],
+            confidence=datapoint['confidence'],
+            embeddings=datapoint['embeddings'],
+            image_metadata=datapoint['image_metadata'],
+            tags=datapoint['tags'])
 
         # We can log the groundtruth asynchronously
         print('Sending a groundtruth')
-        dioptra_logger.log(
+        dioptra_logger.commit(
             request_id=request_uuid,
             groundtruth=datapoint['groundtruth'])
 

@@ -1,0 +1,42 @@
+from enum import Enum
+
+
+class ModelTypes(Enum):
+    CLASSIFIER = 'CLASSIFIER'
+    OBJECT_DETECTION = 'OBJECT_DETECTION'
+    QUESTION_ANSWERING = 'Q_N_A'
+    AUTOMATED_SPEECH_RECOGNITION = 'ASR'
+
+class InputTypes(Enum):
+    TABULAR = 'TABULAR'
+    IMAGE = 'IMAGE'
+    TEXT = 'TEXT'
+    AUDIO = 'AUDIO'
+
+class SupportedTypes(Enum):
+    TABULAR_CLASSIFIER = 'TABULAR_CLASSIFIER', ModelTypes.CLASSIFIER, InputTypes.TABULAR
+    IMAGE_CLASSIFIER = 'IMAGE_CLASSIFIER', ModelTypes.CLASSIFIER, InputTypes.IMAGE
+    TEXT_CLASSIFIER = 'TEXT_CLASSIFIER', ModelTypes.CLASSIFIER, InputTypes.TEXT
+    OBJECT_DETECTION = 'OBJECT_DETECTION', ModelTypes.OBJECT_DETECTION, InputTypes.IMAGE
+    QUESTION_ANSWERING = 'QUESTION_ANSWERING', ModelTypes.QUESTION_ANSWERING, InputTypes.TEXT
+    AUTOMATED_SPEECH_RECOGNITION = 'AUTOMATED_SPEECH_RECOGNITION', \
+        ModelTypes.AUTOMATED_SPEECH_RECOGNITION, InputTypes.AUDIO
+
+    def __new__(cls, *args, **kwds):
+        obj = object.__new__(cls)
+        obj._value_ = args[0]
+        return obj
+
+    def __init__(self, _, model_type, input_type):
+        self._model_type = model_type
+        self._input_type = input_type
+
+    def __str__(self):
+        return self.value
+
+    @property
+    def model_type(self):
+        return self._model_type
+    @property
+    def input_type(self):
+        return self._input_type

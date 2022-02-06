@@ -3,35 +3,68 @@ Utility module
 
 """
 
-import numbers
+import datetime
+
+from dioptra.schemas import (
+    object_detection_schema,
+    feature_schema,
+    tag_schema,
+    embeddings_schema,
+    image_metadata_schema,
+    text_metadata_schema,
+    audio_metadata_schema,
+    question_answering_groundtruth_schema,
+    question_answering_prediction_schema,
+    automated_speech_recogniton_schema
+)
+
+from dioptra.supported_types import ModelTypes
+
+from dioptra.supported_types import SupportedTypes
+
+def validate_model_type(model_type):
+    return isinstance(model_type, SupportedTypes)
 
 def validate_timestamp(timestamp):
-    return timestamp is not None
+    return isinstance(timestamp, datetime.datetime)
 
 def validate_tags(tags):
-    return isinstance(tags, dict)
+    return tag_schema().is_valid(tags)
 
-def validate_prediction(prediction):
-    return isinstance(prediction, str)
+def validate_text(text):
+    return isinstance(text, str)
+
+def validate_annotations(annotations, model_type):
+
+    if model_type.model_type == ModelTypes.CLASSIFIER:
+        return isinstance(annotations, str)
+    elif model_type.model_type == ModelTypes.OBJECT_DETECTION:
+        return object_detection_schema().is_valid(annotations)
+    elif model_type.model_type == ModelTypes.QUESTION_ANSWERING:
+        if question_answering_groundtruth_schema().is_valid(annotations):
+            return True
+        elif question_answering_prediction_schema().is_valid(annotations):
+            return True
+        return False
+    elif model_type.model_type == ModelTypes.AUTOMATED_SPEECH_RECOGNITION:
+        return automated_speech_recogniton_schema().is_valid(annotations)
+    else:
+        return False
 
 def validate_confidence(confidence):
-    return isinstance(confidence, numbers.Number)
+    return isinstance(confidence, float)
 
 def validate_features(features):
-    return isinstance(features, dict)
+    return feature_schema().is_valid(features)
 
 def validate_embeddings(embeddings):
-    return isinstance(embeddings, list)
+    return embeddings_schema().is_valid(embeddings)
 
-def validate_image_url(image_url):
-    return isinstance(image_url, str)
+def validate_image_metadata(image_metadata):
+    return image_metadata_schema().is_valid(image_metadata)
 
-def validate_groundtruth(groundtruth):
-    return isinstance(groundtruth, str)
+def validate_text_metadata(text_metadata):
+    return text_metadata_schema().is_valid(text_metadata)
 
-def add_prefix_to_keys(dictionary, prefix):
-    return_dict = {}
-    for key in dictionary:
-        return_dict[prefix + '.' + key] = dictionary[key]
-
-    return return_dict
+def validate_audio_metadata(audio_metadata):
+    return audio_metadata_schema().is_valid(audio_metadata)
