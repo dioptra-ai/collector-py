@@ -6,6 +6,7 @@ import random
 import datetime
 
 from dioptra.api import Logger
+from dioptra.supported_types import SupportedTypes
 
 API_KEY = os.environ.get('DIOPTRA_API_KEY')
 NUMBER_OF_EVENTS = 10000
@@ -51,7 +52,7 @@ def main():
 
     for _ in range(NUMBER_OF_EVENTS):
 
-        request_timestamp = datetime.datetime.utcnow().isoformat()
+        request_timestamp = datetime.datetime.utcnow()
         request_uuid = str(uuid.uuid4())
 
         datapoint = get_datapoint(config)
@@ -61,6 +62,7 @@ def main():
         dioptra_logger.log(
             model_id=model_id,
             model_version=model_version,
+            model_type=SupportedTypes.IMAGE_CLASSIFIER,
             timestamp=request_timestamp,
             request_id=request_uuid,
             prediction=datapoint['prediction'],
@@ -73,6 +75,8 @@ def main():
         print('Sending a groundtruth')
         dioptra_logger.commit(
             request_id=request_uuid,
+            timestamp=request_timestamp,
+            model_type=SupportedTypes.IMAGE_CLASSIFIER,
             groundtruth=datapoint['groundtruth'])
 
 if __name__ == '__main__':
