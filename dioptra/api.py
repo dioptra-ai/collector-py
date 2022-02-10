@@ -1,6 +1,7 @@
 import logging
 import datetime
 
+import dioptra
 from dioptra.client import Client
 from dioptra.utils import (
     validate_tags,
@@ -13,7 +14,8 @@ from dioptra.utils import (
     validate_text_metadata,
     validate_text,
     validate_audio_metadata,
-    validate_model_type
+    validate_model_type,
+    validate_input_data
 )
 
 class Logger:
@@ -49,12 +51,22 @@ class Logger:
         confidence=None,
         features=None,
         embeddings=None,
+        input_data=None,
         image_metadata=None,
         text=None,
         text_metadata=None,
         tags=None,
         audio_metadata=None
     ):
+        """
+        The log interface sends a set of events to the dioptra api endpoint.
+        Yet, the events are not commited yet.
+        As long as a event is not commited, it won't be available for analysis.
+        Once a committed event with the same `request_id` is sent,
+        it will be aggregated with previous events in a session that share the same `request_id`
+        A session is 1 day long.
+
+        """
 
         payload = self.package_payload(
             model_id,
@@ -69,6 +81,7 @@ class Logger:
             confidence,
             features,
             embeddings,
+            input_data,
             image_metadata,
             text,
             text_metadata,
@@ -99,12 +112,21 @@ class Logger:
         confidence=None,
         features=None,
         embeddings=None,
+        input_data=None,
         image_metadata=None,
         text=None,
         text_metadata=None,
         tags=None,
         audio_metadata=None
     ):
+        """
+        The commit interface sends a set of events to the dioptra api endpoint and commits them.
+        A committed event triggers the aggregation of all previous events with the same `request_id`
+        in the same session. A seesion is 1 day long.
+        Once a committed all events are available for analysis in the dioptra UI.
+
+        """
+
         payload = self.package_payload(
             model_id,
             dataset_id,
@@ -118,6 +140,7 @@ class Logger:
             confidence,
             features,
             embeddings,
+            input_data,
             image_metadata,
             text,
             text_metadata,
@@ -148,6 +171,7 @@ class Logger:
         confidence,
         features,
         embeddings,
+        input_data,
         image_metadata,
         text,
         text_metadata,
@@ -158,7 +182,8 @@ class Logger:
 
         payload = {
             'request_id': request_id,
-            'committed': committed
+            'committed': committed,
+            'api_version': dioptra.__version__
         }
 
         if model_id:
@@ -257,5 +282,17 @@ class Logger:
                 payload['audio_metadata'] = audio_metadata
             else:
                 logging.warning('audio_metadata didn\'t validate. Ignoring...')
+
+        if input_data:
+            if model_type:
+                if validate_model_type(model_type):
+                    if validate_input_data(input_data, model_type):
+                        payload['input_data'] = input_data
+                    else:
+                        logging.warning('input_data didn\'t validate. Ignoring...')
+                else:
+                    logging.warning('model_type didn\'t validate. Ignoring input_data...')
+            else:
+                logging.warning('no model model_type defined. Ignoring input_data...')
 
         return [payload]

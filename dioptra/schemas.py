@@ -2,6 +2,21 @@ import datetime
 
 from schema import Schema, Or, Optional
 
+
+def auto_completion_prediction_schema():
+    return Schema([{
+        'text': str,
+        Optional('displayed'): bool,
+        Optional('confidence'): float,
+        Optional('embeddings'): [float]
+    }])
+
+def auto_completion_groundtruth_schema():
+    return Schema({
+        'text': str,
+        Optional('embeddings'): [float]
+    })
+
 def object_detection_schema():
     return Schema([{
         'class_name': str,
@@ -31,6 +46,17 @@ def question_answering_prediction_schema():
         Optional('embeddings'): [float],
         Optional('confidence'): float
     }])
+
+def semantic_similarity_schema():
+    return Schema(Or(int, float))
+
+def semantic_similarity_input_schema():
+    return Schema({
+        Optional('text_1'): str,
+        'embeddings_1': [float],
+        Optional('text_2'): str,
+        'embeddings_2': [float]
+    })
 
 def image_metadata_schema():
     return Schema({

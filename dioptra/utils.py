@@ -15,10 +15,14 @@ from dioptra.schemas import (
     audio_metadata_schema,
     question_answering_groundtruth_schema,
     question_answering_prediction_schema,
-    automated_speech_recogniton_schema
+    automated_speech_recogniton_schema,
+    auto_completion_groundtruth_schema,
+    auto_completion_prediction_schema,
+    semantic_similarity_schema,
+    semantic_similarity_input_schema
 )
 
-from dioptra.supported_types import ModelTypes
+from dioptra.supported_types import ModelTypes, InputTypes
 
 from dioptra.supported_types import SupportedTypes
 
@@ -34,6 +38,11 @@ def validate_tags(tags):
 def validate_text(text):
     return isinstance(text, str)
 
+def validate_input_data(input_data, model_type):
+    if model_type.input_type == InputTypes.PAIRED_TEXT:
+        return semantic_similarity_input_schema().is_valid(input_data)
+    return False
+
 def validate_annotations(annotations, model_type):
 
     if model_type.model_type == ModelTypes.CLASSIFIER:
@@ -48,6 +57,14 @@ def validate_annotations(annotations, model_type):
         return False
     elif model_type.model_type == ModelTypes.AUTOMATED_SPEECH_RECOGNITION:
         return automated_speech_recogniton_schema().is_valid(annotations)
+    elif model_type.model_type == ModelTypes.AUTO_COMPLETION:
+        if auto_completion_groundtruth_schema().is_valid(annotations):
+            return True
+        elif auto_completion_prediction_schema().is_valid(annotations):
+            return True
+        return False
+    elif model_type.model_type == ModelTypes.SEMANTIC_SIMILARITY:
+        return semantic_similarity_schema().is_valid(annotations)
     else:
         return False
 
