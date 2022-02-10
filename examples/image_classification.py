@@ -41,7 +41,7 @@ def get_datapoint(config):
         'groundtruth': config['images'][image_index]['class']
     }
 
-def main():
+def main(args):
 
     config = load_config()
 
@@ -49,6 +49,12 @@ def main():
 
     model_id = 'document_classification'
     model_version = 'v1.1'
+    dataset_id = None
+    benchmark_id = None
+
+    if args.benchmark:
+        dataset_id = 'doc_classification_benchmark'
+        benchmark_id = str(uuid.uuid4())
 
     for _ in range(NUMBER_OF_EVENTS):
 
@@ -63,6 +69,8 @@ def main():
             model_id=model_id,
             model_version=model_version,
             model_type=SupportedTypes.IMAGE_CLASSIFIER,
+            dataset_id=dataset_id,
+            benchmark_id=benchmark_id,
             timestamp=request_timestamp,
             request_id=request_uuid,
             prediction=datapoint['prediction'],
@@ -80,4 +88,7 @@ def main():
             groundtruth=datapoint['groundtruth'])
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--benchmark', action='store_true')
+    my_args = parser.parse_args()
+    main(my_args)
