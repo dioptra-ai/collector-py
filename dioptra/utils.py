@@ -7,19 +7,23 @@ import datetime
 
 from dioptra.schemas import (
     object_detection_schema,
+    multiple_object_tracking_schema,
     feature_schema,
     tag_schema,
     embeddings_schema,
+    logits_schema,
     image_metadata_schema,
     text_metadata_schema,
     audio_metadata_schema,
+    video_metadata_schema,
     question_answering_groundtruth_schema,
     question_answering_prediction_schema,
     automated_speech_recogniton_schema,
     auto_completion_groundtruth_schema,
     auto_completion_prediction_schema,
     semantic_similarity_schema,
-    semantic_similarity_input_schema
+    semantic_similarity_input_schema,
+    classification_schema
 )
 
 from dioptra.supported_types import ModelTypes, InputTypes
@@ -46,9 +50,16 @@ def validate_input_data(input_data, model_type):
 def validate_annotations(annotations, model_type):
 
     if model_type.model_type == ModelTypes.CLASSIFIER:
-        return isinstance(annotations, str)
+        if isinstance(annotations, str):
+            return True
+        elif classification_schema().is_valid(annotations):
+            return True
+        else:
+            return False
     elif model_type.model_type == ModelTypes.OBJECT_DETECTION:
         return object_detection_schema().is_valid(annotations)
+    elif model_type.model_type == ModelTypes.MULTIPLE_OBJECT_TRACKING:
+        return multiple_object_tracking_schema().is_valid(annotations)
     elif model_type.model_type == ModelTypes.QUESTION_ANSWERING:
         if question_answering_groundtruth_schema().is_valid(annotations):
             return True
@@ -77,6 +88,9 @@ def validate_features(features):
 def validate_embeddings(embeddings):
     return embeddings_schema().is_valid(embeddings)
 
+def validate_logits(embeddings):
+    return embeddings_schema().is_valid(embeddings)
+
 def validate_image_metadata(image_metadata):
     return image_metadata_schema().is_valid(image_metadata)
 
@@ -85,3 +99,6 @@ def validate_text_metadata(text_metadata):
 
 def validate_audio_metadata(audio_metadata):
     return audio_metadata_schema().is_valid(audio_metadata)
+
+def validate_video_metadata(video_metadata):
+    return video_metadata_schema().is_valid(video_metadata)

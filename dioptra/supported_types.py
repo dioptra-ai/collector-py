@@ -8,6 +8,7 @@ class ModelTypes(Enum):
     AUTOMATED_SPEECH_RECOGNITION = 'ASR'
     AUTO_COMPLETION = 'AUTO_COMPLETION'
     SEMANTIC_SIMILARITY = 'SEMANTIC_SIMILARITY'
+    MULTIPLE_OBJECT_TRACKING = 'MULTIPLE_OBJECT_TRACKING'
 
 class InputTypes(Enum):
     TABULAR = 'TABULAR'
@@ -15,6 +16,7 @@ class InputTypes(Enum):
     TEXT = 'TEXT'
     PAIRED_TEXT = 'PAIRED_TEXT'
     AUDIO = 'AUDIO'
+    VIDEO = 'VIDEO'
 
 class SupportedTypes(Enum):
     TABULAR_CLASSIFIER = 'TABULAR_CLASSIFIER', ModelTypes.CLASSIFIER, InputTypes.TABULAR
@@ -27,6 +29,7 @@ class SupportedTypes(Enum):
     AUTO_COMPLETION = 'AUTO_COMPLETION', ModelTypes.AUTO_COMPLETION, InputTypes.TEXT
     SEMANTIC_SIMILARITY = 'SEMANTIC_SIMILARITY', \
         ModelTypes.SEMANTIC_SIMILARITY, InputTypes.PAIRED_TEXT
+    MULTIPLE_OBJECT_TRACKING = 'MULTIPLE_OBJECT_TRACKING', ModelTypes.MULTIPLE_OBJECT_TRACKING, InputTypes.VIDEO
 
     def __new__(cls, *args, **kwds):
         obj = object.__new__(cls)

@@ -29,6 +29,13 @@ def object_detection_schema():
         Optional('text_confidence'): str
     }])
 
+def classification_schema():
+    return Schema({
+        'class_name': [str],
+        'confidence': [Or(int, float)],
+        Optional('logits'): [Or(int, float)]
+    })
+
 def automated_speech_recogniton_schema():
     return Schema({
         'text': str
@@ -63,7 +70,13 @@ def image_metadata_schema():
         'uri': str,
         Optional('rotation'): Or(int, float),
         Optional('height'): Or(int, float),
-        Optional('width'): Or(int, float)
+        Optional('width'): Or(int, float),
+        Optional('object'): Schema({
+            'top': Or(int, float),
+            'left': Or(int, float),
+            'height': Or(int, float),
+            'width': Or(int, float)
+        })
     })
 
 def text_metadata_schema():
@@ -85,6 +98,27 @@ def audio_metadata_schema():
         Optional('end_time'): Or(int, float)
     })
 
+def video_metadata_schema():
+    return Schema({
+        Optional('uri'): str,
+        Optional('duration'): Or(int, float),
+        Optional('height'): Or(int, float),
+        Optional('width'): Or(int, float),
+        Optional('frame_rate'): Or(int, float),
+        Optional('frame'): int,
+    })
+
+def multiple_object_tracking_schema():
+    return Schema([{
+        Optional('class_name'): str,
+        'target_id': Or(str, int),
+        'top': Or(int, float),
+        'left': Or(int, float),
+        'height': Or(int, float),
+        'width': Or(int, float),
+        Optional('confidence'): float
+    }])
+
 def feature_schema():
     return Schema({str: Or(str, int, float, bool)})
 
@@ -92,4 +126,7 @@ def tag_schema():
     return Schema({str: Or(str, int, float, bool)})
 
 def embeddings_schema():
-    return Schema([float])
+    return Schema([Or(float, int)])
+
+def logits_schema():
+    return Schema([Or(float, int)])

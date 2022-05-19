@@ -1,4 +1,5 @@
 import os
+import argparse
 import uuid
 import json
 import random
@@ -7,9 +8,8 @@ import datetime
 from dioptra.api import Logger
 from dioptra.supported_types import SupportedTypes
 
-
 API_KEY = os.environ.get('DIOPTRA_API_KEY')
-NUMBER_OF_EVENTS = 1000
+NUMBER_OF_EVENTS = 1000000
 
 def load_config():
     """

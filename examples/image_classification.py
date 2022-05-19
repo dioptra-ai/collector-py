@@ -45,7 +45,7 @@ def main(args):
 
     config = load_config()
 
-    dioptra_logger = Logger(api_key=API_KEY)
+    dioptra_logger = Logger(api_key=API_KEY, max_workers=1, queue_size=1)
 
     model_id = 'document_classification'
     model_version = 'v1.1'
@@ -65,7 +65,7 @@ def main(args):
 
         # After a prediction we log the prediction, features and tags
         print('Sending a datapoint')
-        dioptra_logger.log(
+        dioptra_logger.commit(
             model_id=model_id,
             model_version=model_version,
             model_type=SupportedTypes.IMAGE_CLASSIFIER,
@@ -77,14 +77,7 @@ def main(args):
             confidence=datapoint['confidence'],
             embeddings=datapoint['embeddings'],
             image_metadata=datapoint['image_metadata'],
-            tags=datapoint['tags'])
-
-        # We can log the groundtruth asynchronously
-        print('Sending a groundtruth')
-        dioptra_logger.commit(
-            request_id=request_uuid,
-            timestamp=request_timestamp,
-            model_type=SupportedTypes.IMAGE_CLASSIFIER,
+            tags=datapoint['tags'],
             groundtruth=datapoint['groundtruth'])
 
 if __name__ == '__main__':

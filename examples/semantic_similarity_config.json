@@ -5,7 +5,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.8,
         "input_data":
         {
             "text_1": "In what country is Normandy located?",
@@ -2366,7 +2366,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.7,
         "input_data":
         {
             "text_1": "What religion were the Normans",
@@ -3940,7 +3940,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 1.0,
         "input_data":
         {
             "text_1": "When did Herve serve as a Byzantine general?",
@@ -5514,7 +5514,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.98,
         "input_data":
         {
             "text_1": "Who was the leader when the Franks entered the Euphrates valley?",
@@ -7088,7 +7088,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.6,
         "input_data":
         {
             "text_1": "Where did the Normans and Byzantines sign the peace treaty?",
@@ -9449,7 +9449,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.8,
         "input_data":
         {
             "text_1": "10th",
@@ -10236,7 +10236,7 @@
             "client_id": "my_client_2"
         },
         "prediction": 0.9,
-        "groundtruth": 0.9,
+        "groundtruth": 0.2,
         "input_data":
         {
             "text_1": "Christian",
@@ -11022,8 +11022,8 @@
         {
             "client_id": "my_client_2"
         },
-        "prediction": 0.9,
-        "groundtruth": 0.9,
+        "prediction": 0.58,
+        "groundtruth": 0.45,
         "input_data":
         {
             "text_1": "King Charles III of West Francia",
@@ -11809,8 +11809,8 @@
         {
             "client_id": "my_client_2"
         },
-        "prediction": 0.9,
-        "groundtruth": 0.9,
+        "prediction": 0.78,
+        "groundtruth": 0.45,
         "input_data":
         {
             "text_1": "1050s",

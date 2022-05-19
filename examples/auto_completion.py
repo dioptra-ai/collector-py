@@ -1,4 +1,5 @@
 import os
+import argparse
 import uuid
 import json
 import random
@@ -31,7 +32,7 @@ def main():
 
     config = load_config()
 
-    dioptra_logger = Logger(api_key=API_KEY)
+    dioptra_logger = Logger(api_key=API_KEY, synchronous_mode=True)
 
     model_id = 'auto_complete'
     model_version = 'v1.1'
@@ -43,9 +44,7 @@ def main():
 
         datapoint = get_datapoint(config)
 
-        # After a prediction we log the prediction, features and tags
-        print('Sending a datapoint')
-        dioptra_logger.commit(
+        dioptra_logger.add_to_batch_commit(
             model_id=model_id,
             model_version=model_version,
             model_type=SupportedTypes.AUTO_COMPLETION,
@@ -55,8 +54,10 @@ def main():
             text=datapoint['text'],
             embeddings=datapoint['embeddings'],
             text_metadata=datapoint['text_metadata'],
-            groundtruth=datapoint['groundtruth'],
-            tags=datapoint['tags'])
+            tags=datapoint['tags'],
+            groundtruth=datapoint['groundtruth'])
+
+    dioptra_logger.submit_batch()
 
 if __name__ == '__main__':
     main()

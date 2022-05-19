@@ -1,4 +1,6 @@
 import os
+from zipfile import ZipFile
+import argparse
 import uuid
 import json
 import random
@@ -74,7 +76,7 @@ def main():
 
     for _ in range(NUMBER_OF_EVENTS):
 
-        request_timestamp = datetime.datetime.utcnow()
+        request_timestamp = datetime.datetime.utcnow().isoformat()
         request_uuid = str(uuid.uuid4())
 
         datapoint = get_datapoint(config)
