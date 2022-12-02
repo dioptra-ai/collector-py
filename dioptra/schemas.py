@@ -18,16 +18,35 @@ def auto_completion_groundtruth_schema():
     })
 
 def object_detection_schema():
-    return Schema([{
-        'class_name': str,
-        'top': Or(int, float),
-        'left': Or(int, float),
-        'height': Or(int, float),
-        'width': Or(int, float),
-        Optional('confidence'): float,
-        Optional('text'): str,
-        Optional('text_confidence'): str
-    }])
+    return Schema(
+        Or([{
+            'top': Or(int, float),
+            'left': Or(int, float),
+            'height': Or(int, float),
+            'width': Or(int, float),
+            'class_name': Or(str, [str]),
+            Optional('logits'): [Or(int, float)],
+            Optional('confidence'): Or(float, [float]),
+            Optional('objectness'): float,
+            Optional('embeddings'): Or(
+                [Or(float, int)],
+                [[Or(float, int)]],
+                [[[Or(float, int)]]]
+            )
+        }],
+        {
+            'boxes': [[float]],
+            Optional('confidences'): Or([float], [[float]]),
+            Optional('logits'): [[Or(int, float)]],
+            Optional('objectness'): [float],
+            'class_names': [str],
+            Optional('embeddings'): [Or(
+                [Or(float, int)],
+                [[Or(float, int)]],
+                [[[Or(float, int)]]]
+            )]
+        }))
+
 
 def classification_schema():
     return Schema({
@@ -126,7 +145,12 @@ def tag_schema():
     return Schema({str: Or(str, int, float, bool)})
 
 def embeddings_schema():
-    return Schema([Or(float, int)])
+    return Schema(
+        Or(
+            [Or(float, int)],
+            [[Or(float, int)]],
+            [[[Or(float, int)]]]
+        ))
 
 def logits_schema():
     return Schema([Or(float, int)])

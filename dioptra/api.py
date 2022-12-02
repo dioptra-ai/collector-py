@@ -1,5 +1,6 @@
 import logging
 import datetime
+import dateutil.parser
 import orjson
 import os
 import gzip
@@ -10,6 +11,7 @@ from smart_open import open as smart_open
 
 from tqdm import tqdm
 import boto3
+from boto3.s3.transfer import TransferConfig
 from botocore import UNSIGNED
 from botocore.client import Config
 import uuid
@@ -96,7 +98,8 @@ class Logger:
         text=None,
         text_metadata=None,
         tags=None,
-        audio_metadata=None
+        audio_metadata=None,
+        validate_sample=True
     ):
         """
         The log interface sends a set of events to the dioptra api endpoint.
@@ -127,7 +130,8 @@ class Logger:
             text_metadata,
             tags,
             audio_metadata,
-            False
+            False,
+            validate_sample=1 if validate_sample else 0
         )
 
         self.client.call(
@@ -154,7 +158,8 @@ class Logger:
         text=None,
         text_metadata=None,
         tags=None,
-        audio_metadata=None
+        audio_metadata=None,
+        validate_sample=True
     ):
         """
         The commit interface sends a set of events to the dioptra api endpoint and commits them.
@@ -183,7 +188,8 @@ class Logger:
             text_metadata,
             tags,
             audio_metadata,
-            True
+            True,
+            validate_sample=1 if validate_sample else 0
         )
 
         self.client.call(
@@ -210,7 +216,8 @@ class Logger:
         text=None,
         text_metadata=None,
         tags=None,
-        audio_metadata=None
+        audio_metadata=None,
+        validate_sample=True
     ):
 
         payload = self.package_payload(
@@ -232,7 +239,8 @@ class Logger:
             text_metadata,
             tags,
             audio_metadata,
-            False
+            False,
+            validate_sample=1 if validate_sample else 0
         )
 
         self.batch.extend(payload)
@@ -257,7 +265,8 @@ class Logger:
         text=None,
         text_metadata=None,
         tags=None,
-        audio_metadata=None
+        audio_metadata=None,
+        validate_sample=True
     ):
 
         payload = self.package_payload(
@@ -279,7 +288,8 @@ class Logger:
             text_metadata,
             tags,
             audio_metadata,
-            True
+            True,
+            validate_sample=1 if validate_sample else 0
         )
 
         self.batch.extend(payload)
@@ -313,7 +323,8 @@ class Logger:
                 with open(batch_tmp_filepath, 'wb') as tmp_file:
                     tmp_file.write(gzip.compress(events_payload))
 
-                transfer = boto3.s3.transfer.S3Transfer(s3_client)
+                GB = 1024 ** 3
+                transfer = boto3.s3.transfer.S3Transfer(s3_client, config=TransferConfig(multipart_threshold=5*GB))
                 transfer.upload_file(
                     batch_tmp_filepath, batch_bucket, batch_key,
                     extra_args={'Metadata': {'x-api-key': self.api_key}}
@@ -397,11 +408,18 @@ class Logger:
                 logging.warning('Invalid model_type. Skipping datapoint...')
                 return []
 
-        if timestamp and validate_timestamp(timestamp):
-            payload['timestamp'] = timestamp.isoformat()
-        else:
-            logging.info('Invalid timestamp. Replacing with current time...')
-            payload['timestamp'] = datetime.datetime.utcnow().isoformat()
+        if timestamp:
+            if isinstance(timestamp, str):
+                try:
+                    timestamp = dateutil.parser.isoparse(timestamp)
+                except:
+                    logging.warning('Could not parse string timestamp from ISO format...')
+
+            if validate_timestamp(timestamp):
+                payload['timestamp'] = timestamp.isoformat()
+            else:
+                logging.warning('Invalid timestamp. Replacing with current time...')
+                payload['timestamp'] = datetime.datetime.utcnow().isoformat()
 
         if groundtruth:
             if model_type:

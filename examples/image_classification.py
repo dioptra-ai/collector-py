@@ -9,6 +9,7 @@ from dioptra.api import Logger
 from dioptra.supported_types import SupportedTypes
 
 API_KEY = os.environ.get('DIOPTRA_API_KEY')
+ENDPOINT_URL = os.environ.get('DIOPTRA_ENDPOINT_URL')
 NUMBER_OF_EVENTS = 10000
 
 
@@ -45,7 +46,8 @@ def main(args):
 
     config = load_config()
 
-    dioptra_logger = Logger(api_key=API_KEY, max_workers=1, queue_size=1)
+    dioptra_logger = Logger(
+        api_key=API_KEY, endpoint_url=ENDPOINT_URL, max_workers=1, queue_size=1)
 
     model_id = 'document_classification'
     model_version = 'v1.1'
