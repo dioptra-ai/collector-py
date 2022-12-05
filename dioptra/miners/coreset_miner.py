@@ -1,12 +1,30 @@
 import requests
 from .base_miner import BaseMiner
 
-class ActivationMiner(BaseMiner):
+class CoresetMiner(BaseMiner):
     def __init__(
             self, display_name, size, embeddings_field, select_filters,
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_filters=None, select_reference_limit=None,
             select_reference_order_by=None, select_reference_desc=None):
+        """
+        CoreSet miner
+        Will perform a AL query based on CoreSet
+
+        Parameters:
+            display_name: name to be displayed in Dioptra
+            size: number of datapoints to query
+            embeddings_field: embedding fields to run the analysis on. Could be 'embeddings' 'prediction.embeddings'
+            select_filters: dioptra style filters to select the data to be queried from
+            select_limit: limit to selected the data
+            select_order_by: field to use to sort the data to control how limit is performed
+            select_desc: whether to order by dec or not
+            select_reference_filters: dioptra style filters to select the data that is already in your training dataset
+            select_reference_limit: like previous but for teh reference data
+            select_reference_order_by: like previous but for teh reference data
+            select_reference_desc: like previous but for teh reference data
+        """
+
         super().__init__()
         try:
             r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={

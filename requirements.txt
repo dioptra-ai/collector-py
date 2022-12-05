@@ -8,3 +8,4 @@ orjson>=3.6.4
 smart_open>=5.2.1
 python-dateutil>=2.8.2
 mgzip==0.2.1
+pandas>=1.2.0

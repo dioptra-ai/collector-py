@@ -8,9 +8,20 @@ class ClassifierRunner(InferenceRunner):
             self, model, embeddings_layers,
             logits_layer, class_names,
             metadata=None,
-            dataloader_args=None,
             data_transform=None,
             device='cpu'):
+        """
+        Utility to perform model inference on a dataset and extract layers needed for AL.
+
+        Parameters:
+            model: model to be used to inference
+            embeddings_layers: an array of layer names that should be used as embeddings
+            logits_layer: the name of the logit layer (pre softmax) to be used for AL
+            class_names: the class names corresponding to each logit. Indexes should match the logit layer
+            metadata: a list of dioptra style metadata to be added to teh datapoints. The indexes in this list should match the indexes in the dataset
+            data_transform: a transform function that will be called before the model is called. Should only return the data, without the groundtruth
+            device: the devide to be use to perform the inference
+        """
 
         super().__init__()
 
@@ -19,7 +30,6 @@ class ClassifierRunner(InferenceRunner):
         self.logits_layer = logits_layer
         self.class_names = class_names
         self.metadata = metadata
-        self.dataloader_args = dataloader_args
         self.data_transform = data_transform
         self.device = device
 
@@ -35,12 +45,20 @@ class ClassifierRunner(InferenceRunner):
         return hook
 
     def run(self, dataloader):
+        """
+        Run the inference on a dataset and upload results to dioptra
+
+        Parameters:
+            dataset: a torch.utils.data.Dataset
+                Should be batched. data_transform can be used to pre process teh data to only return the data, not the groundtruth
+                Should not be shuffled if used with a metadata list
+        """
 
         self.model.eval()
         self.model.to(self.device)
-        
+
         records = []
-        
+
         global_idx = 0
         for batch_index, batch in tqdm(enumerate(dataloader), desc='running inference...'):
             if self.data_transform:

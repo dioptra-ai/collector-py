@@ -5,6 +5,19 @@ class EntropyMiner(BaseMiner):
     def __init__(
             self, display_name, size, select_filters,
             select_limit=None, select_order_by=None, select_desc=None):
+        """
+        Entropy miner
+        Will perform a AL query based on Entropy
+
+        Parameters:
+            display_name: name to be displayed in Dioptra
+            size: number of datapoints to query
+            select_filters: dioptra style filters to select the data to be queried from
+            select_limit: limit to selected the data
+            select_order_by: field to use to sort the data to control how limit is performed
+            select_desc: whether to order by dec or not
+        """
+
         super().__init__()
         try:
             r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={

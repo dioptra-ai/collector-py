@@ -9,6 +9,16 @@ class ClassifierRunner(InferenceRunner):
             self, model, embeddings_layers,
             logits_layer, class_names,
             metadata=None):
+        """
+        Utility to perform model inference on a dataset and extract layers needed for AL.
+
+        Parameters:
+            model: model to be used to inference
+            embeddings_layers: an array of layer names that should be used as embeddings. Can be a jq style path to an embedding layer like [0].my_embedding
+            logits_layer: the name of the logit layer (pre softmax) to be used for AL. Can be a jq style path to an embedding layer like [0].my_logits
+            class_names: the class names corresponding to each logit. Indexes should match the logit layer
+            metadata: a list of dioptra style metadata to be added to teh datapoints. The indexes in this list should match the indexes in the dataset
+        """
 
         super().__init__()
 
@@ -17,20 +27,20 @@ class ClassifierRunner(InferenceRunner):
         self.logits_layer = logits_layer
         self.class_names = class_names
         self.metadata = metadata
-        
+
         input_layer = model.inputs
         if input_layer is None:
             input_layer = model.layers[0].inputs
-            
+
         output_layers = {}
-        
+
         for layer in embeddings_layers + [logits_layer]:
             output_layers[layer] = self._get_layer_by_name(layer).output
-        
+
         self.logging_model = tf.keras.Model(
             inputs=input_layer,
             outputs=output_layers)
-        
+
     def _get_layer_by_name(self, name):
         split = name.split('.')
         current_layer = self.model
@@ -44,9 +54,17 @@ class ClassifierRunner(InferenceRunner):
 
 
     def run(self, dataset):
-        
+        """
+        Run the inference on a dataset and upload results to dioptra
+
+        Parameters:
+            dataset: a tf.data.Dataset
+                Should be batched and pre processed to only return the data, not the groundtruth
+                Should not be shuffled if used with a metadata list
+        """
+
         records = []
-        
+
         global_idx = 0
 
         for batch_index, batch in tqdm(enumerate(dataset), desc='running inference...'):
@@ -74,7 +92,7 @@ class ClassifierRunner(InferenceRunner):
                 }
                } if self.logits_layer is not None and self.class_names is not None else {}
             ),
-            'model_type': 'CLASSIFIER'       
+            'model_type': 'CLASSIFIER'
         }
 
         my_records = []
