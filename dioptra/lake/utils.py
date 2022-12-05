@@ -5,18 +5,20 @@ import pandas as pd
 import boto3
 from botocore.exceptions import ClientError
 
-def download_from_lake(filters, limit=None, order_by=None, desc=None):
+def download_from_lake(filters, limit=None, order_by=None, desc=None, fields=['*']):
 
     api_key = os.environ.get('DIOPTRA_API_KEY', None)
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
+        
+    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
 
     try:
-        r = requests.post('https://app.dioptra.ai/api/metrics/select', headers={
+        r = requests.post(f'{app_endpoint}/api/metrics/select', headers={
             'content-type': 'application/json',
             'x-api-key': api_key
         }, json={
-            'select': '*',
+            'select': ','.join(fields),
             'filters': filters,
             **({'limit': limit} if limit is not None else {}),
             **({'order_by': order_by} if order_by is not None else {}),
@@ -33,9 +35,11 @@ def upload_to_lake(records):
     api_key = os.environ.get('DIOPTRA_API_KEY', None)
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
+        
+    api_endpoint = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai')
 
     try:
-        r = requests.post('https://api.dioptra.ai/events', headers={
+        r = requests.post(f'{api_endpoint}/events', headers={
             'content-type': 'application/json',
             'x-api-key': api_key
         }, json={
@@ -53,11 +57,13 @@ def upload_to_lake_from_s3(bucket_name, object_name):
     api_key = os.environ.get('DIOPTRA_API_KEY', None)
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
+        
+    api_endpoint = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai')
 
     signed_url = _generate_s3_signed_url(bucket_name, object_name)
 
     try:
-        r = requests.post('https://api.dioptra.ai/events', headers={
+        r = requests.post(f'{api_endpoint}/events', headers={
             'content-type': 'application/json',
             'x-api-key': api_key
         }, json={

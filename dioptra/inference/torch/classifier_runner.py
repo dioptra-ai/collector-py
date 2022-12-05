@@ -52,14 +52,14 @@ class ClassifierRunner(InferenceRunner):
                 records.extend(self._build_records(batch_idx, global_idx))
                 global_idx += 1
                 if len(records) > self.max_batch_size:
-                    self._dump_data(records)
+                    self._ingest_data(records)
                     records = []
                 if global_idx > len(dataloader):
                     break
             if global_idx > len(dataloader):
                 break
         if len(records) > 0:
-            self._dump_data(records)
+            self._ingest_data(records)
             records = []
 
     def _build_records(self, record_batch_idx, record_global_idx):
