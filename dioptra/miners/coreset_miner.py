@@ -4,6 +4,7 @@ from .base_miner import BaseMiner
 class CoresetMiner(BaseMiner):
     def __init__(
             self, display_name, size, embeddings_field, select_filters,
+            metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_filters=None, select_reference_limit=None,
             select_reference_order_by=None, select_reference_desc=None):
@@ -35,6 +36,7 @@ class CoresetMiner(BaseMiner):
                 'display_name': display_name,
                 'strategy': 'CORESET',
                 'size': size,
+                'metric': metric,
                 'embeddings_field': embeddings_field,
                 'select': {
                     'filters': select_filters,

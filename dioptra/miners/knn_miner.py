@@ -4,7 +4,7 @@ from .base_miner import BaseMiner
 class KNNMiner(BaseMiner):
     def __init__(
             self, display_name, size, embeddings_field, select_filters,
-            select_reference_filters, metric='euclidian',
+            select_reference_filters, metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_limit=None,
             select_reference_order_by=None, select_reference_desc=None):
