@@ -83,9 +83,6 @@ class ClassifierRunner(InferenceRunner):
     def _build_records(self, record_batch_idx, record_global_idx):
 
         my_record = {
-            **(self.metadata[record_global_idx] \
-               if self.metadata and len(self.metadata) > record_global_idx else {}
-            ),
             **({
                 'prediction': {
                     'logits': self.activation[self.logits_layer][record_batch_idx].cpu().numpy(),
@@ -93,7 +90,10 @@ class ClassifierRunner(InferenceRunner):
                 }
                } if self.logits_layer in self.activation  and self.class_names else {}
             ),
-            'model_type': 'CLASSIFIER'
+            'model_type': 'CLASSIFIER',
+            **(self.metadata[record_global_idx] \
+               if self.metadata and len(self.metadata) > record_global_idx else {}
+            )
         }
 
         my_records = []
@@ -101,13 +101,14 @@ class ClassifierRunner(InferenceRunner):
         for my_layer in self.embeddings_layers:
             if my_layer not in self.activation:
                 continue
+            record_tags = my_record.get('tags', {})
+            if 'embeddings_name' not in record_tags:
+                record_tags['embeddings_name'] = my_layer
+                my_record['tags'] = record_tags
             layer_record = {
-                **my_record,
-                'embeddings': self.activation[my_layer][record_batch_idx].cpu().numpy()
+                'embeddings': self.activation[my_layer][record_batch_idx].cpu().numpy(),
+                **my_record
             }
-            record_tags = layer_record.get('tags', {})
-            record_tags['embeddings_layer'] = my_layer
-            layer_record['tags'] = record_tags
             my_records.append(layer_record)
 
         if len(my_records) == 0:
