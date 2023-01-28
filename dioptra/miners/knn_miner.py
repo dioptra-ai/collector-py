@@ -7,7 +7,8 @@ class KNNMiner(BaseMiner):
             select_reference_filters, metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_limit=None,
-            select_reference_order_by=None, select_reference_desc=None):
+            select_reference_order_by=None, select_reference_desc=None,
+            skip_caching=False):
         """
         KNN miner
         Will perform a AL query based on CoreSet
@@ -25,6 +26,7 @@ class KNNMiner(BaseMiner):
             select_reference_limit: like previous but for teh reference data
             select_reference_order_by: like previous but for teh reference data
             select_reference_desc: like previous but for teh reference data
+            skip_caching: whether to skip vector caching or not
         """
 
         super().__init__()
@@ -50,7 +52,8 @@ class KNNMiner(BaseMiner):
                     **({'limit': select_reference_limit if select_reference_limit is not None else {}}),
                     **({'order_by': select_reference_order_by if select_reference_order_by is not None else {}}),
                     **({'desc': select_reference_desc if select_reference_desc is not None else {}}),
-                }
+                },
+                'skip_caching': skip_caching
             })
             r.raise_for_status()
             self.miner_id = r.json()['miner_id']

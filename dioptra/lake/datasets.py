@@ -109,13 +109,11 @@ class Dataset():
 
         request_ids = [entry['request_id'] for entry in r.json()]
 
-        df = download_from_lake(fields=fields, filters=[{
+        return download_from_lake(fields=fields, filters=[{
             'left': 'request_id',
             'op': 'in',
             'right': request_ids
         }])
-
-        return df
 
     def add(self, uuids):
         """
@@ -227,3 +225,4 @@ class Dataset():
             raise err
 
         return r.json()
+

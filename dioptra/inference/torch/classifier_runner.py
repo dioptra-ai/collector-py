@@ -1,3 +1,4 @@
+import re
 from tqdm import tqdm
 import torch
 
@@ -5,8 +6,8 @@ from dioptra.inference.inference_runner import InferenceRunner
 
 class ClassifierRunner(InferenceRunner):
     def __init__(
-            self, model, embeddings_layers,
-            logits_layer, class_names,
+            self, model, embeddings_layers=[],
+            logits_layer=None, class_names=[],
             metadata=None,
             data_transform=None,
             device='cpu'):
@@ -36,12 +37,27 @@ class ClassifierRunner(InferenceRunner):
         self.activation = {}
 
         for my_layer_name in embeddings_layers + [logits_layer]:
-            my_layer = getattr(self.model, my_layer_name)
-            my_layer.register_forward_hook(self._get_activation(my_layer_name))
+            if my_layer_name is not None:
+                my_layer = self._get_layer_by_name(my_layer_name)
+                my_layer.register_forward_hook(self._get_activation(my_layer_name))
+
+    def _get_layer_by_name(self, name):
+        split = name.split('.')
+        current_layer = self.model
+        for part in split:
+            if re.match('\[[0-9]+\]', part):
+                index = int(part.replace('[', '').replace(']', ''))
+                current_layer = current_layer[index]
+            else:
+                current_layer = getattr(current_layer, part)
+        return current_layer
 
     def _get_activation(self, name):
         def hook(model, input, output):
-            self.activation[name] = output.detach()
+            if hasattr(output, 'last_hidden_state'):
+                self.activation[name] = output.last_hidden_state
+            else:
+                self.activation[name] = output.detach()
         return hook
 
     def run(self, dataloader):
@@ -60,6 +76,10 @@ class ClassifierRunner(InferenceRunner):
         records = []
 
         global_idx = 0
+        if hasattr(dataloader, 'dataset'):
+            dataset_size = len(dataloader.dataset) # we are using a dataloader
+        else:
+            dataset_size = len(dataloader)  # we are using a dataset directly
         for batch_index, batch in tqdm(enumerate(dataloader), desc='running inference...'):
             if self.data_transform:
                 batch = self.data_transform(batch)
@@ -72,9 +92,9 @@ class ClassifierRunner(InferenceRunner):
                 if len(records) > self.max_batch_size:
                     self._ingest_data(records)
                     records = []
-                if global_idx > len(dataloader):
+                if global_idx > dataset_size:
                     break
-            if global_idx > len(dataloader):
+            if global_idx > dataset_size:
                 break
         if len(records) > 0:
             self._ingest_data(records)

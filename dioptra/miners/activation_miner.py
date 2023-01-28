@@ -4,7 +4,7 @@ from .base_miner import BaseMiner
 class ActivationMiner(BaseMiner):
     def __init__(
             self, display_name, size, embeddings_field, select_filters,
-            select_limit=None, select_order_by=None, select_desc=None):
+            select_limit=None, select_order_by=None, select_desc=None, skip_caching=False):
         """
         Activation miner
         Will perform a AL query based on activation
@@ -17,6 +17,8 @@ class ActivationMiner(BaseMiner):
             select_limit: limit to selected the data
             select_order_by: field to use to sort the data to control how limit is performed
             select_desc: whether to order by dec or not
+            skip_caching: whether to skip vector caching or not
+
         """
 
         super().__init__()
@@ -35,7 +37,8 @@ class ActivationMiner(BaseMiner):
                     **({'limit': select_limit if select_limit is not None else {}}),
                     **({'order_by': select_order_by if select_order_by is not None else {}}),
                     **({'desc': select_desc if select_desc is not None else {}}),
-                }
+                },
+                'skip_caching': skip_caching
             })
             r.raise_for_status()
             self.miner_id = r.json()['miner_id']

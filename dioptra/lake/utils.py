@@ -36,6 +36,7 @@ def download_from_lake(filters, limit=None, order_by=None, desc=None, fields=['*
         })
         r.raise_for_status()
         return pd.json_normalize(r.json())
+
     except requests.exceptions.RequestException as err:
         print('There was an error querying the lake ...')
         raise err

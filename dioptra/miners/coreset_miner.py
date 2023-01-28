@@ -7,7 +7,8 @@ class CoresetMiner(BaseMiner):
             metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_filters=None, select_reference_limit=None,
-            select_reference_order_by=None, select_reference_desc=None):
+            select_reference_order_by=None, select_reference_desc=None,
+            skip_caching=False):
         """
         CoreSet miner
         Will perform a AL query based on CoreSet
@@ -24,6 +25,7 @@ class CoresetMiner(BaseMiner):
             select_reference_limit: like previous but for teh reference data
             select_reference_order_by: like previous but for teh reference data
             select_reference_desc: like previous but for teh reference data
+            skip_caching: whether to skip vector caching or not
         """
 
         super().__init__()
@@ -51,7 +53,8 @@ class CoresetMiner(BaseMiner):
                         **({'order_by': select_reference_order_by if select_reference_order_by is not None else {}}),
                         **({'desc': select_reference_desc if select_reference_desc is not None else {}}),
                     }
-                } if select_reference_filters is not None else {})
+                } if select_reference_filters is not None else {}),
+                'skip_caching': skip_caching
             })
             r.raise_for_status()
             self.miner_id = r.json()['miner_id']
