@@ -35,11 +35,33 @@ def download_from_lake(filters, limit=None, order_by=None, desc=None, fields=['*
             **({'desc': desc} if desc is not None else {})
         })
         r.raise_for_status()
+
         return pd.json_normalize(r.json())
 
     except requests.exceptions.RequestException as err:
         print('There was an error querying the lake ...')
         raise err
+
+def delete_from_lake(filters, limit=None, order_by=None, desc=None):
+    """
+    Delete metadata from the data lake
+
+    Parameters:
+        filters: dioptra style filters to select the data to be deleted
+        limit: limit to selected the data
+        order_by: field to use to sort the data to control how limit is performed
+        desc: whether to order by dec or not
+    """
+
+    df = download_from_lake(filters, limit=limit, order_by=order_by, desc=desc, fields=['request_id'])
+    delete_list = []
+    for row in df['request_id'].drop_duplicates('request_id', keep='first').values:
+        delete_list.append({'request_id': row, 'delete': 'row'})
+        if len(delete_list) > 1000:
+            upload_to_lake(delete_list)
+            delete_list = []
+    upload_to_lake(delete_list)
+
 
 def upload_to_lake(records):
     """
