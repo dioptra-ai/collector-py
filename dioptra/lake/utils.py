@@ -55,7 +55,7 @@ def delete_from_lake(filters, limit=None, order_by=None, desc=None):
 
     df = download_from_lake(filters, limit=limit, order_by=order_by, desc=desc, fields=['request_id'])
     delete_list = []
-    for row in df['request_id'].drop_duplicates('request_id', keep='first').values:
+    for row in df['request_id'].drop_duplicates(keep='first'):
         delete_list.append({'request_id': row, 'delete': 'row'})
         if len(delete_list) > 1000:
             upload_to_lake(delete_list)
