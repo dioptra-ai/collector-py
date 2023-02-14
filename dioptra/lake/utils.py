@@ -53,15 +53,29 @@ def delete_from_lake(filters, limit=None, order_by=None, desc=None):
         desc: whether to order by dec or not
     """
 
-    df = download_from_lake(filters, limit=limit, order_by=order_by, desc=desc, fields=['request_id'])
-    delete_list = []
-    for row in df['request_id'].drop_duplicates(keep='first'):
-        delete_list.append({'request_id': row, 'delete': 'row'})
-        if len(delete_list) > 1000:
-            upload_to_lake(delete_list)
-            delete_list = []
-    upload_to_lake(delete_list)
+    api_key = os.environ.get('DIOPTRA_API_KEY', None)
+    if api_key is None:
+        raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
+    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+
+    try:
+        r = requests.post(f'{app_endpoint}/api/metrics/delete', headers={
+            'content-type': 'application/json',
+            'x-api-key': api_key
+        }, json={
+            'filters': filters,
+            **({'limit': limit} if limit is not None else {}),
+            **({'order_by': order_by} if order_by is not None else {}),
+            **({'desc': desc} if desc is not None else {})
+        })
+        r.raise_for_status()
+
+        return r.json()
+
+    except requests.exceptions.RequestException as err:
+        print('There was an error deleting from the lake ...')
+        raise err
 
 def upload_to_lake(records):
     """
