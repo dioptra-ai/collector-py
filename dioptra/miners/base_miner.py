@@ -13,6 +13,7 @@ class BaseMiner():
         self.api_key = api_key
         self.app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
         self.miner_id = None
+        self.miner_name = None
 
     def get_status(self):
 
@@ -91,3 +92,9 @@ class BaseMiner():
         except requests.exceptions.RequestException as err:
             print('There was an error deleting the miner...')
             raise err
+
+    def __str__(self):
+        return f'Miner with uuid {self.miner_id} and name {self.miner_name}'
+
+    def __repr__(self):
+        return self.__str__()

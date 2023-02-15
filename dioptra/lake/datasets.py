@@ -1,7 +1,23 @@
 import os
 import requests
 
-from dioptra.lake.utils import download_from_lake
+from dioptra.lake.utils import download_from_lake, _list_dataset_metadata
+
+def list_datasets():
+    """
+    List all the datasets
+
+    """
+
+    dataset_list = []
+
+    for metadata in _list_dataset_metadata():
+        my_dataset = Dataset()
+        my_dataset.dataset_id = metadata['uuid']
+        my_dataset.dataset_name = metadata['display_name']
+        dataset_list.append(my_dataset)
+
+    return dataset_list
 
 class Dataset():
 
@@ -14,6 +30,7 @@ class Dataset():
         self.api_key = api_key
         self.app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
         self.dataset_id = None
+        self.dataset_name = None
 
     def get_from_uuid(self, uuid):
         """
@@ -22,7 +39,35 @@ class Dataset():
         Parameters:
             uuid: uuid of the dataset
         """
+        try:
+            r = requests.get(f'{self.app_endpoint}/api/dataset/{uuid}', headers={
+                'content-type': 'application/json',
+                'x-api-key': self.api_key
+            })
+            r.raise_for_status()
+        except requests.exceptions.RequestException as err:
+            print('There was an error retreiving a dataset ...')
+            raise err
+        metadata = r.json()
+        if len(metadata) == 0:
+            raise ValueError(f'No Dataset exists for uuid {uuid}')
+        self.dataset_name = metadata['display_name']
         self.dataset_id = uuid
+
+    def get_from_name(self, name):
+        """
+        Retreive a dataset using its name
+
+        Parameters:
+            name: name of the dataset
+        """
+
+        for metadata in _list_dataset_metadata():
+            if metadata['display_name'] == name:
+                self.dataset_name = name
+                self.dataset_id = metadata['uuid']
+                return
+        raise ValueError(f'No Dataset exists for name {name}')
 
     def create(self, name):
         """
@@ -43,7 +88,7 @@ class Dataset():
         except requests.exceptions.RequestException as err:
             print('There was an error creating a dataset ...')
             raise err
-
+        self.dataset_name = name
         self.dataset_id = r.json()['uuid']
 
     def commit(self, message):
@@ -224,5 +269,10 @@ class Dataset():
             print('There was an error deleting a dataset ...')
             raise err
 
-        return r.json()
+
+    def __str__(self):
+        return f'Dataset with uuid {self.dataset_id} and name {self.dataset_name}'
+
+    def __repr__(self):
+        return self.__str__()
 

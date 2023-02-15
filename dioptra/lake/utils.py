@@ -150,3 +150,52 @@ def _generate_s3_signed_url(bucket_name, object_name):
         raise err
 
     return response
+
+def _list_dataset_metadata():
+    """
+    List all the dataset metadata
+
+    """
+
+    api_key = os.environ.get('DIOPTRA_API_KEY', None)
+    if api_key is None:
+        raise RuntimeError('DIOPTRA_API_KEY env var is not set')
+
+    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+
+    try:
+        r = requests.get(f'{app_endpoint}/api/dataset', headers={
+            'content-type': 'application/json',
+            'x-api-key': api_key
+        })
+        r.raise_for_status()
+    except requests.exceptions.RequestException as err:
+        print('There was an error getting datasets metadata ...')
+        raise err
+
+    return r.json()
+
+def _list_miner_metadata():
+    """
+    List all the miner metadata
+
+    """
+
+    api_key = os.environ.get('DIOPTRA_API_KEY', None)
+    if api_key is None:
+        raise RuntimeError('DIOPTRA_API_KEY env var is not set')
+
+    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+
+    try:
+        r = requests.get(f'{app_endpoint}/api/tasks/miners', headers={
+            'content-type': 'application/json',
+            'x-api-key': api_key
+        })
+        r.raise_for_status()
+    except requests.exceptions.RequestException as err:
+        print('There was an error getting miners metadata ...')
+        raise err
+
+    return r.json()
+

@@ -58,6 +58,7 @@ class CoresetMiner(BaseMiner):
             })
             r.raise_for_status()
             self.miner_id = r.json()['miner_id']
+            self.miner_name = display_name
         except requests.exceptions.RequestException as err:
             print('There was an error getting miner status...')
             raise err
