@@ -3,17 +3,20 @@ from tqdm import tqdm
 import tensorflow as tf
 
 from dioptra.inference.inference_runner import InferenceRunner
+from dioptra.lake.utils import _format_prediction
 
-class ClassifierRunner(InferenceRunner):
+class TfInferenceRunner(InferenceRunner):
     def __init__(
-            self, model, embeddings_layers,
-            logits_layer, class_names,
+            self, model, model_type,
+            embeddings_layers=[],
+            logits_layer=None, class_names=[],
             metadata=None):
         """
         Utility to perform model inference on a dataset and extract layers needed for AL.
 
         Parameters:
             model: model to be used to inference
+            model_type: the type of the model use. Can be CLASSIFIER or SEMANTIC_SEGMENTATION
             embeddings_layers: an array of layer names that should be used as embeddings. Can be a jq style path to an embedding layer like [0].my_embedding
             logits_layer: the name of the logit layer (pre softmax) to be used for AL. Can be a jq style path to an embedding layer like [0].my_logits
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
@@ -27,6 +30,7 @@ class ClassifierRunner(InferenceRunner):
         self.logits_layer = logits_layer
         self.class_names = class_names
         self.metadata = metadata
+        self.model_type = model_type
 
         input_layer = model.inputs
         if input_layer is None:
@@ -35,7 +39,8 @@ class ClassifierRunner(InferenceRunner):
         output_layers = {}
 
         for layer in embeddings_layers + [logits_layer]:
-            output_layers[layer] = self._get_layer_by_name(layer).output
+            if layer is not None:
+                output_layers[layer] = self._get_layer_by_name(layer).output
 
         self.logging_model = tf.keras.Model(
             inputs=input_layer,
@@ -83,13 +88,12 @@ class ClassifierRunner(InferenceRunner):
 
         my_record = {
             **({
-                'prediction': {
-                    'logits': output[self.logits_layer][record_batch_idx].numpy(),
-                    'class_names': self.class_names
-                }
+                'prediction': _format_prediction(
+                                output[self.logits_layer][record_batch_idx].numpy(),
+                                self.model_type,
+                                self.class_names)
                } if self.logits_layer is not None and self.class_names is not None else {}
             ),
-            'model_type': 'CLASSIFIER',
             **(self.metadata[record_global_idx] \
                if self.metadata and len(self.metadata) > record_global_idx else {}
             )

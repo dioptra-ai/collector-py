@@ -6,7 +6,9 @@ from torch.utils.data import Dataset
 import hashlib
 import smart_open
 from PIL import Image
+import numpy as np
 from functools import partial
+from dioptra.lake.utils import _decode_to_np_array
 
 class ImageDataset(Dataset):
     def __init__(self, dataframe, transform=None):
@@ -24,8 +26,7 @@ class ImageDataset(Dataset):
             os.path.join(os.path.expanduser('~'), '.dioptra')))
         self.dataframe = dataframe
         self.transform = transform
-        self.image_field = 'image_metadata.uri'
-        self.load_images = False
+        self.use_caching = True
 
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
@@ -43,24 +44,57 @@ class ImageDataset(Dataset):
         """
         row = self.dataframe.iloc[index].copy()
 
-        if self.load_images or is_prefetch:
-            if self.image_field in row:
-                field_hash = hashlib.md5(row[self.image_field].encode()).hexdigest()
-                cached_image_path = os.path.join(self.cache_dir, field_hash)
-                if os.path.exists(cached_image_path):
-                    if not is_prefetch:
-                        with open(cached_image_path, 'rb') as file:
-                            row['image'] = pickle.load(file)
-                else:
-                    img = Image.open(smart_open.open(row[self.image_field], 'rb'))
-                    with open(cached_image_path, 'wb') as file:
-                        pickle.dump(img, file)
-                    if not is_prefetch:
-                        row['image'] = img
+        # Resolving the image field
+        if 'metadata' in row and row['type'] =='IMAGE' and 'uri' in row['metadata']:
+            if self.use_caching:
+                row['image'] = self._handle_cache(
+                    row['metadata']['uri'], self._download_img, is_prefetch)
+            else:
+                row['image'] = self._download_img(row['metadata']['uri'])
+
+        # Resolving the groundtruths field
+        if 'groundtruths' in row:
+            for groundtruth in row['groundtruths']:
+                if groundtruth['task_type'] == 'CLASSIFIER':
+                    row['class_name'] = groundtruth['class_name']
+                    break
+                if groundtruth['task_type'] == 'SEGMENTATION':
+                    if self.use_caching:
+                        row['segmentation_class_mask'] = self._handle_cache(
+                            groundtruth['encoded_segmentation_class_mask'],
+                            _decode_to_np_array,
+                            is_prefetch)
+                    else:
+                        row['segmentation_class_mask'] = _decode_to_np_array(
+                            groundtruth['encoded_segmentation_class_mask'])
+
+                    if row['segmentation_class_mask'] is not None:
+                        row['segmentation_class_mask'] = row['segmentation_class_mask'].astype(np.int32)
+                    break
+
         if self.transform is not None and not is_prefetch:
             return self.transform(row)
+
         return row
 
+    def _handle_cache(self, field, field_transform, is_prefetch):
+        field_hash = hashlib.md5(field.encode()).hexdigest()
+        cached_object_path = os.path.join(self.cache_dir, field_hash)
+
+        if is_prefetch and os.path.exists(cached_object_path):
+            return
+
+        if self.use_caching and os.path.exists(cached_object_path):
+            with open(cached_object_path, 'rb') as file:
+                return pickle.load(file)
+
+        object_transformed = field_transform(field)
+        with open(cached_object_path, 'wb') as file:
+            pickle.dump(object_transformed, file)
+        return object_transformed
+
+    def _download_img(self, image_path):
+        return Image.open(smart_open.open(image_path, 'rb'))
 
     def __len__(self):
         """
@@ -76,8 +110,8 @@ class ImageDataset(Dataset):
             num_workers: number of processors to be used
 
         """
-
-        self.load_images = True
+        if not self.use_caching:
+            raise RuntimeError('Turn use_caching to True to be able to prefetch images')
 
         with Pool(num_workers) as my_pool:
             list(tqdm.tqdm(

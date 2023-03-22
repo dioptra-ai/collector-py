@@ -3,10 +3,12 @@ from tqdm import tqdm
 import torch
 
 from dioptra.inference.inference_runner import InferenceRunner
+from dioptra.lake.utils import _format_prediction
 
-class ClassifierRunner(InferenceRunner):
+class TorchInferenceRunner(InferenceRunner):
     def __init__(
-            self, model, embeddings_layers=[],
+            self, model, model_type,
+            embeddings_layers=[],
             logits_layer=None, class_names=[],
             metadata=None,
             data_transform=None,
@@ -16,6 +18,7 @@ class ClassifierRunner(InferenceRunner):
 
         Parameters:
             model: model to be used to inference
+            model_type: the type of the model use. Can be CLASSIFIER or SEMANTIC_SEGMENTATION
             embeddings_layers: an array of layer names that should be used as embeddings
             logits_layer: the name of the logit layer (pre softmax) to be used for AL
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
@@ -33,6 +36,7 @@ class ClassifierRunner(InferenceRunner):
         self.metadata = metadata
         self.data_transform = data_transform
         self.device = device
+        self.model_type = model_type
 
         self.activation = {}
 
@@ -104,13 +108,12 @@ class ClassifierRunner(InferenceRunner):
 
         my_record = {
             **({
-                'prediction': {
-                    'logits': self.activation[self.logits_layer][record_batch_idx].cpu().numpy(),
-                    'class_names': self.class_names
-                }
+                'prediction': _format_prediction(
+                                self.activation[self.logits_layer][record_batch_idx].cpu().numpy(),
+                                self.model_type,
+                                self.class_names)
                } if self.logits_layer in self.activation  and self.class_names else {}
             ),
-            'model_type': 'CLASSIFIER',
             **(self.metadata[record_global_idx] \
                if self.metadata and len(self.metadata) > record_global_idx else {}
             )

@@ -1,14 +1,13 @@
 import requests
 from .base_miner import BaseMiner
 
-class RandomMiner(BaseMiner):
+class VarianceMiner(BaseMiner):
     def __init__(
             self, display_name, size, select_filters,
             select_limit=None, select_order_by=None, select_desc=None):
         """
-        Random miner
-        Will perform a random query
-
+        Variance miner
+        Will perform a AL query based on Variance
         Parameters:
             display_name: name to be displayed in Dioptra
             size: number of datapoints to query
@@ -20,14 +19,13 @@ class RandomMiner(BaseMiner):
 
         super().__init__()
         try:
-
             r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },
             json={
                 'display_name': display_name,
-                'strategy': 'RANDOM',
+                'strategy': 'VARIANCE',
                 'size': size,
                 'select': {
                     'filters': select_filters,

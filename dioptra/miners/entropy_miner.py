@@ -30,9 +30,9 @@ class EntropyMiner(BaseMiner):
                 'size': size,
                 'select': {
                     'filters': select_filters,
-                    **({'limit': select_limit if select_limit is not None else {}}),
-                    **({'order_by': select_order_by if select_order_by is not None else {}}),
-                    **({'desc': select_desc if select_desc is not None else {}}),
+                    **({'limit': select_limit} if select_limit is not None else {}),
+                    **({'order_by': select_order_by} if select_order_by is not None else {}),
+                    **({'desc': select_desc} if select_desc is not None else {}),
                 }
             })
             r.raise_for_status()

@@ -43,15 +43,15 @@ class KNNMiner(BaseMiner):
                 'embeddings_field': embeddings_field,
                 'select': {
                     'filters': select_filters,
-                    **({'limit': select_limit if select_limit is not None else {}}),
-                    **({'order_by': select_order_by if select_order_by is not None else {}}),
-                    **({'desc': select_desc if select_desc is not None else {}}),
+                    **({'limit': select_limit} if select_limit is not None else {}),
+                    **({'order_by': select_order_by} if select_order_by is not None else {}),
+                    **({'desc': select_desc} if select_desc is not None else {}),
                 },
                 'select_reference': {
                     'filters': select_reference_filters,
-                    **({'limit': select_reference_limit if select_reference_limit is not None else {}}),
-                    **({'order_by': select_reference_order_by if select_reference_order_by is not None else {}}),
-                    **({'desc': select_reference_desc if select_reference_desc is not None else {}}),
+                    **({'limit': select_reference_limit} if select_reference_limit is not None else {}),
+                    **({'order_by': select_reference_order_by} if select_reference_order_by is not None else {}),
+                    **({'desc': select_reference_desc} if select_reference_desc is not None else {}),
                 },
                 'skip_caching': skip_caching
             })

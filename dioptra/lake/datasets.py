@@ -1,7 +1,9 @@
 import os
 import requests
 
-from dioptra.lake.utils import download_from_lake, _list_dataset_metadata
+import pandas as pd
+
+from dioptra.lake.utils import _list_dataset_metadata
 
 def list_datasets():
     """
@@ -69,6 +71,19 @@ class Dataset():
                 return
         raise ValueError(f'No Dataset exists for name {name}')
 
+    def get_or_create(self, name):
+        """
+        Retreive a dataset using its name or create it if it doesn't exist
+
+        Parameters:
+            name: name of the dataset
+        """
+
+        try:
+            self.get_from_name(name)
+        except ValueError:
+            self.create(name)
+
     def create(self, name):
         """
         Creates a dataset. Datasets are collections of datapoints that are version controled by Dioptra
@@ -127,14 +142,14 @@ class Dataset():
             })
             r.raise_for_status()
         except requests.exceptions.RequestException as err:
-            print('There was an error creating a dataset ...')
+            print('There was an error fetching history for the dataset ...')
             raise err
 
         return r.json()
 
-    def download(self, fields=['*']):
+    def download_datapoints(self):
         """
-        Get the uuids of the datapoints in the dataset
+        Get the datapoints in the dataset
 
         Parameters:
             fields: the list of fields to be downloaded.
@@ -152,83 +167,50 @@ class Dataset():
             print('There was an error downloading a dataset ...')
             raise err
 
-        request_ids = [entry['request_id'] for entry in r.json()]
+        return pd.DataFrame(r.json())
 
-        return download_from_lake(fields=fields, filters=[{
-            'left': 'request_id',
-            'op': 'in',
-            'right': request_ids
-        }])
-
-    def add(self, uuids):
+    def add_datapoints(self, datapoint_ids):
         """
-        Add datapoints to the dataset using their uuids
+        Add datapoints to the dataset using their ids
         The datapoints will be uncommitted until a commit command is called
 
         Parameters:
-            uuids: list of uuids
+            datapoint_ids: list of datapoint ids
         """
-
-        try:
-            r = requests.post(f'{self.app_endpoint}/api/datapoints/from-event-uuids', headers={
-                'content-type': 'application/json',
-                'x-api-key': self.api_key
-            }, json={
-                'eventUuids': uuids
-            })
-            r.raise_for_status()
-        except requests.exceptions.RequestException as err:
-            print('There was an error adding datapoints to a dataset ...')
-            raise err
-
-        datapoints_uuids = [entity['uuid'] for entity in r.json()]
 
         try:
             r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/add', headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
-                'datapointIds': datapoints_uuids
+                'datapointIds': datapoint_ids
             })
             r.raise_for_status()
         except requests.exceptions.RequestException as err:
             print('There was an error adding datapoints to a dataset ...')
             raise err
 
-    def remove(self, uuids):
+    def remove_datapoints(self, datapoint_ids):
         """
-        Remove datapoints to the dataset using their uuids
+        Remove datapoints to the dataset using their ids
         The datapoints will be uncommitted until a commit command is called unless the datapoints are aleady uncommitted
 
         Parameters:
-            uuids: list of uuids
+            datapoint_ids: list of datapoint ids
         """
-
-        try:
-            r = requests.post(f'{self.app_endpoint}/api/datapoints/from-event-uuids', headers={
-                'content-type': 'application/json',
-                'x-api-key': self.api_key
-            }, json={
-                'eventUuids': uuids
-            })
-            r.raise_for_status()
-        except requests.exceptions.RequestException as err:
-            print('There was an error adding datapoints to a dataset ...')
-            raise err
-
-        datapoints_uuids = [entity['uuid'] for entity in r.json()]
 
         try:
             r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/remove', headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
-                'datapointIds': datapoints_uuids
+                'datapointIds': datapoint_ids
             })
             r.raise_for_status()
         except requests.exceptions.RequestException as err:
             print('There was an error adding datapoints to a dataset ...')
             raise err
+
 
     def checkout(self, commit_id):
         """

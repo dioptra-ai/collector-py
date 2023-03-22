@@ -1,6 +1,6 @@
 import os
 import requests
-
+import time
 
 class BaseMiner():
 
@@ -30,29 +30,38 @@ class BaseMiner():
 
     def get_config(self):
 
-        try:
-            r = requests.get(f'{self.app_endpoint}/api/tasks/miners/{self.miner_id}', headers={
-                'content-type': 'application/json',
-                'x-api-key': self.api_key
-            })
-            r.raise_for_status()
-        except requests.exceptions.RequestException as err:
-            print('There was an error getting miner config...')
-            raise err
+        r = requests.get(f'{self.app_endpoint}/api/tasks/miners/{self.miner_id}', headers={
+            'content-type': 'application/json',
+            'x-api-key': self.api_key
+        })
+        r.raise_for_status()
+
         return r.json()
 
     def get_results(self):
+        sleepTimeSecs = 1
+        totalSleepTimeSecs = 0
 
-        try:
+        while True:
+            if totalSleepTimeSecs > 3600:
+                raise RuntimeError('Timed out waiting for miner results')
+                
             r = requests.get(f'{self.app_endpoint}/api/tasks/miners/inspect/{self.miner_id}', headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
             r.raise_for_status()
-        except requests.exceptions.RequestException as err:
-            print('There was an error getting miner results...')
-            raise err
-        return r.json().get('task', {}).get('result', None)
+            task = r.json().get('task', {})
+            status = task.get('status', None)
+
+            if status == 'SUCCESS':
+                return task.get('result', [])
+            elif status == 'FAILURE' or status == 'REVOKED':
+                raise RuntimeError('Miner failed')
+            else:
+                time.sleep(sleepTimeSecs)
+                totalSleepTimeSecs += sleepTimeSecs
+                sleepTimeSecs = min(sleepTimeSecs * 2, 60)
 
     def run(self):
 
