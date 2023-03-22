@@ -7,7 +7,7 @@ from dioptra.lake.utils import _format_prediction
 
 class TorchInferenceRunner(InferenceRunner):
     def __init__(
-            self, model, model_type,
+            self, model, model_type, model_name = None, predictions_to_update = None,
             embeddings_layers=[],
             logits_layer=None, class_names=[],
             metadata=None,
@@ -18,7 +18,9 @@ class TorchInferenceRunner(InferenceRunner):
 
         Parameters:
             model: model to be used to inference
+            model_name: the name of the model
             model_type: the type of the model use. Can be CLASSIFIER or SEMANTIC_SEGMENTATION
+            predictions_to_update: the predictions to be updated. If None, all predictions are expected to be new
             embeddings_layers: an array of layer names that should be used as embeddings
             logits_layer: the name of the logit layer (pre softmax) to be used for AL
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
@@ -30,6 +32,8 @@ class TorchInferenceRunner(InferenceRunner):
         super().__init__()
 
         self.model = model
+        self.model_name = model_name
+        self.predictions_to_update = predictions_to_update
         self.embeddings_layers = embeddings_layers
         self.logits_layer = logits_layer
         self.class_names = class_names
@@ -105,22 +109,31 @@ class TorchInferenceRunner(InferenceRunner):
             records = []
 
     def _build_records(self, record_batch_idx, record_global_idx):
+        # find the prediction id that corresponds to the datapoint id in the metadata
+        prediction_id = None
+        if self.predictions_to_update is not None:
+            # old_predictions is a dataframe with the following columns:
+            #   - id: the id of the prediction
+            #   - datapoint: the datapoint id for the prediction
 
+            datapoint_id = self.metadata[record_global_idx]['id']
+            prediction_id = self.predictions_to_update[self.predictions_to_update['datapoint'] == datapoint_id]['id'].values[0]
         my_record = {
             **({
-                'prediction': _format_prediction(
+                'prediction': [_format_prediction(
                                 self.activation[self.logits_layer][record_batch_idx].cpu().numpy(),
                                 self.model_type,
-                                self.class_names)
+                                self.model_name,
+                                self.class_names,
+                                prediction_id)]
                } if self.logits_layer in self.activation  and self.class_names else {}
             ),
             **(self.metadata[record_global_idx] \
                if self.metadata and len(self.metadata) > record_global_idx else {}
-            )
+            ),
         }
-
         my_records = []
-
+        
         for my_layer in self.embeddings_layers:
             if my_layer not in self.activation:
                 continue
@@ -136,5 +149,4 @@ class TorchInferenceRunner(InferenceRunner):
 
         if len(my_records) == 0:
             my_records.append(my_record)
-
         return my_records

@@ -79,6 +79,7 @@ def get_predictions(datapoint_ids, filters=[]):
     fields = [
         'datapoints.id',
         'predictions.id',
+        'predictions.datapoint',
         'predictions.task_type',
         'predictions.created_at',
         'predictions.class_name',
@@ -126,6 +127,7 @@ def get_groundtruths(datapoint_ids, filters=[]):
     fields = [
         'datapoints.id',
         'groundtruths.id',
+        'groundtruths.datapoint',
         'groundtruths.task_type',
         'groundtruths.created_at',
         'groundtruths.class_name',
@@ -207,7 +209,7 @@ def upload_to_lake(records):
 
     return response
 
-def upload_to_lake_via_object_store(records, custom_path=''):
+def upload_to_lake_via_object_store(records, custom_path='', disable_batching=False):
     """
     Uploading metadata to the data lake via an s3 or gcs bucket.
     Should be the prefered upload method for large records
@@ -230,7 +232,7 @@ def upload_to_lake_via_object_store(records, custom_path=''):
     # s3 url is of form: s3://bucket_name/path/to/file
     # gcs url is of form: gs://bucket_name/path/to/file
     file_name = os.path.join(
-        prefix, custom_path, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz')
+        prefix, custom_path, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz').strip('/')
     store_url = f'{storage_type}://{os.path.join(object_store_bucket, file_name)}'
 
     payload = b'\n'.join(
@@ -239,10 +241,9 @@ def upload_to_lake_via_object_store(records, custom_path=''):
 
     _upload_to_bucket((compressed_payload, store_url), no_compression=True)
 
-    return upload_to_lake_from_bucket(object_store_bucket, file_name, storage_type)
+    return upload_to_lake_from_bucket(object_store_bucket, file_name, storage_type, disable_batching)
 
-
-def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3'):
+def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disable_batching=False):
     """
     Uploading metadata to the data lake from an s3 bucket
     The data should be a new line delimited JSON and can be compressed with Gzip
@@ -268,6 +269,8 @@ def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3'):
             'content-type': 'application/json',
             'x-api-key': api_key
         }, json={
+            'url': signed_url
+        } if disable_batching else {
             'urls': [signed_url]
         })
         r.raise_for_status()
@@ -409,12 +412,14 @@ def _format_groundtruth(groundtruth, gt_type, class_names=None):
 
     Parameters:
         groundtruth: the groundtruth field
-        gt_type: the type of gt. Supported types CLASSIFIER, SEGMENTATION
+        gt_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
         class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
 
     """
-    if gt_type == 'CLASSIFIER':
-        if isinstance(groundtruth, int) and class_names is not None:
+    if getattr(groundtruth, 'numpy', None) is not None: # dealing with Tensorflow Tensors
+        groundtruth = groundtruth.numpy()
+    if gt_type == 'CLASSIFICATION':
+        if (isinstance(groundtruth, int) or isinstance(groundtruth, np.integer)) and class_names is not None:
             class_name = class_names[groundtruth]
         else:
             class_name = groundtruth
@@ -435,17 +440,19 @@ def _format_groundtruth(groundtruth, gt_type, class_names=None):
             **({'class_names': class_names} if class_names is not None else {})
         }
 
-def _format_prediction(logits, pred_type, class_names=None):
+def _format_prediction(logits, pred_type, model_name, class_names=None, prediction_id=None):
     """
     Utility formatting the groundtruth field according to the model type
 
     Parameters:
         logits: the prediction logits (before softmax)
-        pred_type: the type of gt. Supported types CLASSIFIER, SEGMENTATION
+        pred_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
         class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
-
+        prediction_id: the id of the prediction to be updated
     """
-    if pred_type in ['CLASSIFIER', 'SEGMENTATION']:
+    if getattr(logits, 'numpy', None) is not None: # dealing with Tensorflow Tensors
+        logits = logits.numpy()
+    if pred_type in ['CLASSIFICATION', 'SEGMENTATION']:
         if isinstance(logits, np.ndarray):
             logits = logits.tolist()
         else:
@@ -453,7 +460,9 @@ def _format_prediction(logits, pred_type, class_names=None):
         return {
             'task_type': pred_type,
             'logits': logits,
-            **({'class_names': class_names} if class_names is not None else {})
+            'model_name': model_name,
+            **({'class_names': class_names} if class_names is not None else {}),
+            **({'id': prediction_id} if prediction_id is not None else {})
         }
 
 def _upload_to_bucket(payload, no_compression=False):
@@ -472,6 +481,7 @@ def upload_image_dataset(
     image_field=None,
     groundtruth_field=None,
     datapoints_metadata=None,
+    image_ids=None,
     class_names=None, dataset_tags=None,
     max_batch_size=200, num_workers=20):
     """
@@ -482,12 +492,13 @@ def upload_image_dataset(
     Parameters:
         dataset: the dataset to upload. Should be iteratable.
         image_field: the name of the field containing the image. Should be in PIL format
-        dataset_type: the type of data, Supported CLASSIFIER, SEMANTIC_SEGMENTATION
+        dataset_type: the type of data, Supported CLASSIFICATION, SEMANTIC_SEGMENTATION
         groundtruth_field: the name of the field containing the groundtruth
         datapoints_metadata:
             a list of metadata to be added to each datapoint.
             should already be formatted.
-            if it contains a 'image_id' field, this will be used to name the images in s3
+        image_ids:
+            a list of image ids. if present, this will be used to name teh images on S3
         class_names: a list of class names to convert indexes in the groundtruth to class names
         class_names: a dict of tags to be added to the entire dataset
         max_batch_size: the maximum batch uplodd size
@@ -531,18 +542,33 @@ def upload_image_dataset(
         if groundtruth_field is not None and groundtruth_field not in row:
             raise RuntimeError(f'{groundtruth_field} is not in the dataset')
 
+        my_metadata = None
+        image_id = None
+        if datapoints_metadata is not None:
+            my_metadata = datapoints_metadata[index]
+        if image_ids is not None:
+            image_id = image_ids[index]
+
         if image_field is not None:
             pil_img = row[image_field]
             if not isinstance(pil_img, PIL.Image.Image):
-                raise Exception('the image provided was not a PIL image')
+                if getattr(pil_img, 'numpy', None) is not None: # dealing with Tensorflow Tensors
+                    pil_img = PIL.Image.fromarray(pil_img.numpy())
+                    pil_img.format = 'JPEG'
+                    if image_id is not None:
+                        _, ext = os.path.splitext(image_id)
+                        if ext:
+                            ext = ext.replace('.', '')
+                            if ext.lower() == 'jpg':
+                                pil_img.format = 'JPEG'
+                            else:
+                                pil_img.format = ext.upper()
+                else:
+                    raise Exception('the image provided was not a PIL image')
             img_width, img_height = pil_img.size
-            image_id = str(index) + '_' + str(uuid.uuid4())
 
-        my_metadata = None
-        if datapoints_metadata is not None:
-            my_metadata = datapoints_metadata[index]
-            if 'image_id' in my_metadata:
-                image_id = my_metadata['image_id']
+            if image_id is None:
+                image_id = str(index) + '_' + str(uuid.uuid4())
 
         img_url = _build_img_url(storage_type, s3_bucket, s3_prefix_bucket, image_id, pil_img)
 
