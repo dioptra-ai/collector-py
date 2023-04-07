@@ -7,11 +7,16 @@ from dioptra.lake.utils import _format_prediction
 
 class TorchInferenceRunner(InferenceRunner):
     def __init__(
-            self, model, model_type, model_name = None, predictions_to_update = None,
+            self, model, model_type,
+            model_name = None,
+            datapoint_ids = [],
             embeddings_layers=[],
-            logits_layer=None, class_names=[],
-            metadata=None,
+            logits_layer=None,
+            class_names=[],
+            datapoints_metadata=None,
+            dataset_metadata=None,
             data_transform=None,
+            mc_dropout_samples=0,
             device='cpu'):
         """
         Utility to perform model inference on a dataset and extract layers needed for AL.
@@ -19,12 +24,13 @@ class TorchInferenceRunner(InferenceRunner):
         Parameters:
             model: model to be used to inference
             model_name: the name of the model
-            model_type: the type of the model use. Can be CLASSIFIER or SEMANTIC_SEGMENTATION
-            predictions_to_update: the predictions to be updated. If None, all predictions are expected to be new
+            model_type: the type of the model use. Can be CLASSIFICATION or SEGMENTATION
+            datapoint_ids: alist of datapoints to update with the predictions. Should be in the same order as the dataset.
             embeddings_layers: an array of layer names that should be used as embeddings
             logits_layer: the name of the logit layer (pre softmax) to be used for AL
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
-            metadata: a list of dioptra style metadata to be added to teh datapoints. The indexes in this list should match the indexes in the dataset
+            datapoints_metadata: a list of dioptra style datapoints metadata to be added to teh datapoints. The indexes in this list should match the indexes in the dataset
+            dataset_metadata: a dioptra style dataset metadata to be added to the dataset
             data_transform: a transform function that will be called before the model is called. Should only return the data, without the groundtruth
             device: the devide to be use to perform the inference
         """
@@ -33,14 +39,21 @@ class TorchInferenceRunner(InferenceRunner):
 
         self.model = model
         self.model_name = model_name
-        self.predictions_to_update = predictions_to_update
+        self.datapoint_ids = datapoint_ids
         self.embeddings_layers = embeddings_layers
         self.logits_layer = logits_layer
         self.class_names = class_names
-        self.metadata = metadata
+        self.datapoints_metadata = datapoints_metadata
+        self.dataset_metadata = dataset_metadata
         self.data_transform = data_transform
         self.device = device
         self.model_type = model_type
+        self.mc_dropout_samples = mc_dropout_samples
+
+        if mc_dropout_samples > 0:
+            for m in self.model.modules():
+                if m.__class__.__name__.startswith('Dropout'):
+                    m.train()
 
         self.activation = {}
 
@@ -75,7 +88,7 @@ class TorchInferenceRunner(InferenceRunner):
         Parameters:
             dataset: a torch.utils.data.Dataset
                 Should be batched. data_transform can be used to pre process teh data to only return the data, not the groundtruth
-                Should not be shuffled if used with a metadata list
+                Should not be shuffled if used with a datapoints_metadata list
         """
 
         self.model.eval()
@@ -88,20 +101,32 @@ class TorchInferenceRunner(InferenceRunner):
             dataset_size = len(dataloader.dataset) # we are using a dataloader
         else:
             dataset_size = len(dataloader)  # we are using a dataset directly
-        for batch_index, batch in tqdm(enumerate(dataloader), desc='running inference...'):
+        for _, batch in tqdm(enumerate(dataloader), desc='running inference...'):
             if self.data_transform:
                 batch = self.data_transform(batch)
             batch = batch.to(self.device)
-            with torch.no_grad():
-                self.model(batch)
-            for batch_idx, _ in enumerate(batch):
-                records.extend(self._build_records(batch_idx, global_idx))
-                global_idx += 1
-                if len(records) > self.max_batch_size:
-                    self._ingest_data(records)
-                    records = []
-                if global_idx > dataset_size:
-                    break
+
+            nb_samples = 1 if self.mc_dropout_samples == 0 else self.mc_dropout_samples
+            samples_records = []
+
+            for _ in range(nb_samples):
+                batch_global_idx = global_idx
+                batch_records = []
+                with torch.no_grad():
+                    self.model(batch)
+                for batch_idx, _ in enumerate(batch):
+                    batch_records.extend(self._build_records(batch_idx, global_idx))
+                    batch_global_idx += 1
+                samples_records.append(batch_records)
+
+            resolved_records = self._resolve_records(samples_records)
+            records.extend(resolved_records)
+
+            global_idx += len(batch)
+
+            if len(records) > self.max_batch_size:
+                self._ingest_data(records)
+                records = []
             if global_idx > dataset_size:
                 break
         if len(records) > 0:
@@ -109,44 +134,34 @@ class TorchInferenceRunner(InferenceRunner):
             records = []
 
     def _build_records(self, record_batch_idx, record_global_idx):
-        # find the prediction id that corresponds to the datapoint id in the metadata
-        prediction_id = None
-        if self.predictions_to_update is not None:
-            # old_predictions is a dataframe with the following columns:
-            #   - id: the id of the prediction
-            #   - datapoint: the datapoint id for the prediction
+        datapoint_id = None
+        if record_global_idx < len(self.datapoint_ids):
+            datapoint_id = self.datapoint_ids[record_global_idx]
 
-            datapoint_id = self.metadata[record_global_idx]['id']
-            prediction_id = self.predictions_to_update[self.predictions_to_update['datapoint'] == datapoint_id]['id'].values[0]
-        my_record = {
-            **({
-                'prediction': [_format_prediction(
-                                self.activation[self.logits_layer][record_batch_idx].cpu().numpy(),
-                                self.model_type,
-                                self.model_name,
-                                self.class_names,
-                                prediction_id)]
-               } if self.logits_layer in self.activation  and self.class_names else {}
-            ),
-            **(self.metadata[record_global_idx] \
-               if self.metadata and len(self.metadata) > record_global_idx else {}
-            ),
-        }
-        my_records = []
-        
+        logits = None
+        if self.logits_layer in self.activation:
+            logits = self.activation[self.logits_layer][record_batch_idx].cpu().numpy()
+
+        embeddings = {}
         for my_layer in self.embeddings_layers:
             if my_layer not in self.activation:
                 continue
-            record_tags = my_record.get('tags', {})
-            if 'embeddings_name' not in record_tags:
-                record_tags['embeddings_name'] = my_layer
-                my_record['tags'] = record_tags
-            layer_record = {
-                'embeddings': self.activation[my_layer][record_batch_idx].cpu().numpy(),
-                **my_record
-            }
-            my_records.append(layer_record)
+            embeddings[my_layer] = self.activation[my_layer][record_batch_idx].cpu().numpy()
 
-        if len(my_records) == 0:
-            my_records.append(my_record)
-        return my_records
+        return [{
+            **({
+                'prediction': _format_prediction(
+                    logits=logits,
+                    embeddings=embeddings,
+                    task_type=self.model_type,
+                    model_name=self.model_name,
+                    class_names=self.class_names
+                )
+               } if logits is not None or embeddings is not None else {}
+            ),
+            **({'id': datapoint_id} if datapoint_id is not None else {}),
+            **(self.datapoints_metadata[record_global_idx] \
+               if self.datapoints_metadata and len(self.datapoints_metadata) > record_global_idx else {}
+            ),
+            **(self.dataset_metadata if self.dataset_metadata else {})
+        }]

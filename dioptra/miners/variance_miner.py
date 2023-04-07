@@ -4,7 +4,7 @@ from .base_miner import BaseMiner
 class VarianceMiner(BaseMiner):
     def __init__(
             self, display_name, size, select_filters,
-            select_limit=None, select_order_by=None, select_desc=None):
+            select_limit=None, select_order_by=None, select_desc=None, model_name=None):
         """
         Variance miner
         Will perform a AL query based on Variance
@@ -27,6 +27,7 @@ class VarianceMiner(BaseMiner):
                 'display_name': display_name,
                 'strategy': 'VARIANCE',
                 'size': size,
+                'model_name': model_name,
                 'select': {
                     'filters': select_filters,
                     **({'limit': select_limit} if select_limit is not None else {}),

@@ -3,7 +3,7 @@ from .base_miner import BaseMiner
 
 class EntropyMiner(BaseMiner):
     def __init__(
-            self, display_name, size, select_filters,
+            self, display_name, size, select_filters, model_name=None,
             select_limit=None, select_order_by=None, select_desc=None):
         """
         Entropy miner
@@ -28,6 +28,7 @@ class EntropyMiner(BaseMiner):
                 'display_name': display_name,
                 'strategy': 'ENTROPY',
                 'size': size,
+                'model_name': 'model_name',
                 'select': {
                     'filters': select_filters,
                     **({'limit': select_limit} if select_limit is not None else {}),

@@ -12,7 +12,7 @@ import smart_open
 import PIL
 import pandas as pd
 import numpy as np
-import lz4
+import lz4.frame
 import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
@@ -34,14 +34,22 @@ def query_dioptra_app(method, path, body=None):
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
     app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
-
-    r = getattr(requests, method.lower())(f'{app_endpoint}{path}', headers={
-        'content-type': 'application/json',
-        'x-api-key': api_key
-    }, json=body)
-    r.raise_for_status()
-
-    return r.json()
+    r = None
+    try:
+        r = getattr(requests, method.lower())(f'{app_endpoint}{path}', headers={
+            'content-type': 'application/json',
+            'x-api-key': api_key
+        }, json=body)
+        r.raise_for_status()
+    except requests.exceptions.RequestException as err:
+        if r is None:
+            raise err
+        else:
+            error_body = r.json()
+            error_message = error_body.get('error', error_body).get('message', error_body)
+            raise Exception(f'Api Error: {error_message}')
+    else:
+        return r.json()
 
 def select_datapoints(filters, limit=None, order_by=None, desc=None, fields=['*'], offset=0):
     """
@@ -68,37 +76,55 @@ def select_datapoints(filters, limit=None, order_by=None, desc=None, fields=['*'
         }
     ))
 
-def get_predictions(datapoint_ids, filters=[]):
+def select_predictions(filters, limit=None, order_by=None, desc=None, fields=['*'], offset=0):
     """
-    Get predictions for a set of datapoints
+    Select metadata from the data lake
 
     Parameters:
-        datapoint_ids: list of datapoint ids to get predictions for
+        filters: dioptra style filters to select the data to be queried from
+        limit: limit to selected the data
+        order_by: field to use to sort the data to control how limit is performed
+        desc: whether to order by dec or not
+        fields: array of fields to be queried. By default all fields are queried
     """
 
-    fields = [
-        'datapoints.id',
-        'predictions.id',
-        'predictions.datapoint',
-        'predictions.task_type',
-        'predictions.created_at',
-        'predictions.class_name',
-        'predictions.class_names',
-        'predictions.confidence',
-        'predictions.confidences',
-        'predictions.model_name',
-        'predictions.metrics',
-        'predictions.encoded_segmentation_class_mask',
-        'predictions.top',
-        'predictions.left',
-        'predictions.height',
-        'predictions.width'
-    ]
-    datapoints = select_datapoints(
-        filters=[{'left': 'datapoints.id', 'op': 'in', 'right': datapoint_ids}] + filters,
-        fields=fields)
+    return pd.DataFrame(query_dioptra_app(
+        'POST',
+        '/api/predictions/select',
+        {
+            'selectColumns': fields,
+            'filters': filters,
+            **({'limit': limit} if limit is not None else {}),
+            **({'orderBy': order_by} if order_by is not None else {}),
+            **({'desc': desc} if desc is not None else {}),
+            'offset': offset
+        }
+    ))
 
-    return pd.DataFrame([p for predictions in datapoints['predictions'] for p in predictions])
+def select_groundtruths(filters, limit=None, order_by=None, desc=None, fields=['*'], offset=0):
+    """
+    Select metadata from the data lake
+
+    Parameters:
+        filters: dioptra style filters to select the data to be queried from
+        limit: limit to selected the data
+        order_by: field to use to sort the data to control how limit is performed
+        desc: whether to order by dec or not
+        fields: array of fields to be queried. By default all fields are queried
+    """
+
+    return pd.DataFrame(query_dioptra_app(
+        'POST',
+        '/api/groundtruths/select',
+        {
+            'selectColumns': fields,
+            'filters': filters,
+            **({'limit': limit} if limit is not None else {}),
+            **({'orderBy': order_by} if order_by is not None else {}),
+            **({'desc': desc} if desc is not None else {}),
+            'offset': offset
+        }
+    ))
 
 def delete_predictions(prediction_ids):
     """
@@ -115,34 +141,6 @@ def delete_predictions(prediction_ids):
             'predictionIds': prediction_ids
         }
     )
-
-def get_groundtruths(datapoint_ids, filters=[]):
-    """
-    Get groundtruths for a set of datapoints
-
-    Parameters:
-        datapoint_ids: list of datapoint ids to get groundtruths for
-    """
-
-    fields = [
-        'datapoints.id',
-        'groundtruths.id',
-        'groundtruths.datapoint',
-        'groundtruths.task_type',
-        'groundtruths.created_at',
-        'groundtruths.class_name',
-        'groundtruths.class_names',
-        'groundtruths.encoded_segmentation_class_mask',
-        'groundtruths.top',
-        'groundtruths.left',
-        'groundtruths.height',
-        'groundtruths.width'
-    ]
-    datapoints = select_datapoints(
-        filters=[{'left': 'datapoints.id', 'op': 'in', 'right': datapoint_ids}] + filters,
-        fields=fields)
-
-    return pd.DataFrame([g for groundtruths in datapoints['groundtruths'] for g in groundtruths])
 
 def delete_groundtruths(groundtruth_ids):
     """
@@ -209,7 +207,7 @@ def upload_to_lake(records):
 
     return response
 
-def upload_to_lake_via_object_store(records, custom_path='', disable_batching=False):
+def upload_to_lake_via_object_store(records, custom_path='', disable_batching=False, offset=None, limit=None):
     """
     Uploading metadata to the data lake via an s3 or gcs bucket.
     Should be the prefered upload method for large records
@@ -235,15 +233,13 @@ def upload_to_lake_via_object_store(records, custom_path='', disable_batching=Fa
         prefix, custom_path, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz').strip('/')
     store_url = f'{storage_type}://{os.path.join(object_store_bucket, file_name)}'
 
-    payload = b'\n'.join(
-        [orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY)for record in records])
-    compressed_payload = mgzip.compress(payload, compresslevel=2)
+    compressed_payload = _build_compressed_payload(records)
 
     _upload_to_bucket((compressed_payload, store_url), no_compression=True)
 
-    return upload_to_lake_from_bucket(object_store_bucket, file_name, storage_type, disable_batching)
+    return upload_to_lake_from_bucket(object_store_bucket, file_name, storage_type, disable_batching, offset, limit)
 
-def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disable_batching=False):
+def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disable_batching=False, offset=None, limit=None):
     """
     Uploading metadata to the data lake from an s3 bucket
     The data should be a new line delimited JSON and can be compressed with Gzip
@@ -269,7 +265,9 @@ def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disa
             'content-type': 'application/json',
             'x-api-key': api_key
         }, json={
-            'url': signed_url
+            'url': signed_url,
+            'offset': offset,
+            'limit': limit
         } if disable_batching else {
             'urls': [signed_url]
         })
@@ -281,6 +279,30 @@ def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disa
         raise err
 
     return response
+
+def store_to_local_cache(records):
+    """
+    Store records to a local cache directory
+
+    Parameters:
+        records: array of dipotra style records. See the doc for accepted formats
+    """
+
+    cache_dir = os.environ.get(
+        'DIOPTRA_LOCAL_CACHE_DIR',
+        os.path.join(os.path.expanduser('~'), '.dioptra'))
+
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
+    file_name = os.path.join(cache_dir, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz')
+
+    compressed_payload = _build_compressed_payload(records)
+
+    with open(file_name, 'wb') as f:
+        f.write(compressed_payload)
+
+    return file_name
 
 def wait_for_upload(upload_id):
     """
@@ -313,7 +335,8 @@ def wait_for_upload(upload_id):
             if upload['status'] in ['SUCCEEDED']:
                 return upload
             elif upload['status'] in ['FAILED', 'TIMED_OUT', 'ABORTED']:
-                raise RuntimeError(f'Upload failed with status {upload["status"]}. See more information in the Dioptra UI: {app_endpoint}/settings/uploads/{upload_id}')
+                raise RuntimeError(
+                    f'Upload failed with status {upload["status"]}. See more information in the Dioptra UI: {app_endpoint}/settings/uploads/{upload_id}')
             else:
                 time.sleep(sleepTimeSecs)
                 totalSleepTimeSecs += sleepTimeSecs
@@ -374,7 +397,96 @@ def _list_miner_metadata():
     return query_dioptra_app('GET', '/api/tasks/miners')
 
 
-def _encode_np_array(np_array):
+def _build_compressed_payload(records):
+    payload = b'\n'.join(
+        [orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY)for record in records])
+    return mgzip.compress(payload, compresslevel=2)
+
+def join_on_datapoints(datapoints, groundtruths=None, predictions=None):
+    """
+    Join datapoints with predictions or groundtruth.
+    Returns an object store dataset ready dataframe
+
+    Parameters:
+        datapoints: a dataframe containing the datapoints
+        predictions: a dataframe containing the predictions
+        groundtruths: a dataframe containing the groundtruths
+    """
+
+    if predictions is not None:
+        join_formatted = predictions.set_index('datapoint')\
+                .apply(lambda x: x.to_dict(), axis=1)\
+                .to_frame('predictions')\
+                .groupby('datapoint')\
+                .agg(list)
+        datapoints = datapoints.join(join_formatted, on='id')
+
+    if groundtruths is not None:
+        join_formatted = groundtruths.set_index('datapoint')\
+            .apply(lambda x: x.to_dict(), axis=1)\
+            .to_frame('groundtruths')\
+            .groupby('datapoint')\
+            .agg(list)
+        datapoints = datapoints.join(join_formatted, on='id')
+
+    return datapoints
+
+def group_by_uri(datapoints, uri_grouped_transform, num_workers=1):
+    """
+    Group datapoints by uri
+
+    Parameters:
+        datapoints: a dataframe containing the datapoints typically out of the `join_on_datapoints` method
+        uri_grouped_transform: the transform to be applied to the grouped row
+            the transform should take a tuple for each row with
+                the first index being the id,
+                the second index being the metadata,
+                the third index being the groundtruths if present in the datapoints,
+                the fourth index being the predictions if present in the datapoints
+            the transform should return a dictionary with the columns to be added/modified to the dataframe
+        num_workers: number of parallel workers
+
+    """
+
+    datapoints['uri'] = [row['uri'] for row in datapoints['metadata']]
+
+    aggregation_dict = {}
+
+    for key in datapoints.keys():
+        if key not in ['id', 'metadata', 'groundtruths', 'predictions']:
+            aggregation_dict[key] = 'first'
+        elif key == 'id':
+            aggregation_dict[key] = list
+        elif key == 'metadata':
+            aggregation_dict[key] = list
+        elif key == 'groundtruths':
+            aggregation_dict[key] = sum
+        elif key == 'predictions':
+            aggregation_dict[key] = sum
+
+    grouped_df = datapoints.groupby('uri').agg(aggregation_dict)
+
+    zipped_columns = []
+    for key in ['id', 'metadata', 'groundtruths', 'predictions']:
+        if key in grouped_df.keys():
+            zipped_columns.append(grouped_df[key])
+
+    zipped_column = list(zip(*zipped_columns))
+
+    with Pool(num_workers) as my_pool:
+        results = list(tqdm.tqdm(
+            my_pool.imap(uri_grouped_transform, zipped_column),
+            total=len(zipped_column),
+            desc='Processing your rows ...',
+            ncols=100
+        ))
+
+    for key in results[0].keys():
+        grouped_df[key] = [result[key] for result in results]
+
+    return grouped_df
+
+def _encode_np_array(np_array, light_compression=False):
     """
     Encode and compress a np array
 
@@ -388,10 +500,14 @@ def _encode_np_array(np_array):
     bytes_buffer = io.BytesIO()
     np.save(bytes_buffer, np_array)
 
+    compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
+    if light_compression:
+        compression_level=lz4.frame.COMPRESSIONLEVEL_MIN
+
     return base64.b64encode(
         lz4.frame.compress(
             bytes_buffer.getvalue(),
-            compression_level=lz4.frame.COMPRESSIONLEVEL_MAX
+            compression_level=compression_level
         )).decode('ascii')
 
 def _decode_to_np_array(value):
@@ -406,28 +522,28 @@ def _decode_to_np_array(value):
     return np.load(io.BytesIO(decoded_bytes), allow_pickle=True)
 
 
-def _format_groundtruth(groundtruth, gt_type, class_names=None):
+def _format_groundtruth(groundtruth, task_type, class_names=None, groundtruth_id=None):
     """
     Utility formatting the groundtruth field according to the model type
 
     Parameters:
         groundtruth: the groundtruth field
-        gt_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
+        task_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
         class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
 
     """
     if getattr(groundtruth, 'numpy', None) is not None: # dealing with Tensorflow Tensors
         groundtruth = groundtruth.numpy()
-    if gt_type == 'CLASSIFICATION':
+    if task_type == 'CLASSIFICATION':
         if (isinstance(groundtruth, int) or isinstance(groundtruth, np.integer)) and class_names is not None:
             class_name = class_names[groundtruth]
         else:
             class_name = groundtruth
         return {
-            'task_type': gt_type,
+            'task_type': task_type,
             'class_name': class_name
         }
-    if gt_type == 'SEGMENTATION':
+    if task_type == 'SEGMENTATION':
         if isinstance(groundtruth, PIL.Image.Image):
             gt_array = np.array(groundtruth).tolist()
         if isinstance(groundtruth, np.ndarray):
@@ -435,35 +551,50 @@ def _format_groundtruth(groundtruth, gt_type, class_names=None):
         if isinstance(groundtruth, list):
             gt_array = groundtruth
         return {
-            'task_type': gt_type,
+            'task_type': task_type,
             'segmentation_class_mask': gt_array,
-            **({'class_names': class_names} if class_names is not None else {})
+            **({'class_names': class_names} if class_names is not None else {}),
+            **({'id': groundtruth_id} if groundtruth_id is not None else {})
         }
 
-def _format_prediction(logits, pred_type, model_name, class_names=None, prediction_id=None):
+def _format_prediction(logits, embeddings, task_type, model_name, class_names=None, prediction_id=None):
     """
-    Utility formatting the groundtruth field according to the model type
+    Utility formatting the prediction field.
 
     Parameters:
         logits: the prediction logits (before softmax)
-        pred_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
+        embeddings: a dictionary containing the embeddings by layer names, or a single embeddings vector.
+        task_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
         class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
         prediction_id: the id of the prediction to be updated
     """
     if getattr(logits, 'numpy', None) is not None: # dealing with Tensorflow Tensors
         logits = logits.numpy()
-    if pred_type in ['CLASSIFICATION', 'SEGMENTATION']:
-        if isinstance(logits, np.ndarray):
-            logits = logits.tolist()
-        else:
-            logits = logits
+
+    if not isinstance(logits, np.ndarray):
+        logits = np.array(logits)
+    logits = logits.astype(np.float16).tolist()
+
+    if task_type in ['CLASSIFICATION', 'SEGMENTATION']:
         return {
-            'task_type': pred_type,
+            'task_type': task_type,
             'logits': logits,
+            'embeddings': embeddings,
             'model_name': model_name,
             **({'class_names': class_names} if class_names is not None else {}),
             **({'id': prediction_id} if prediction_id is not None else {})
         }
+
+def _resolve_mc_drop_out_predictions(predictions):
+    return {
+        **({'encoded_logits': [p['encoded_logits'] for p in predictions]} if 'encoded_logits' in predictions[0] else {}),
+        **({'embeddings': predictions[0]['embeddings']} if 'embeddings' in predictions[0] else {}),
+        **({'logits': [p['logits'] for p in predictions]} if 'logits' in predictions[0] else {}),
+        **({'class_names': predictions[0]['class_names']} if 'class_names' in predictions[0] else {}),
+        **({'task_type': predictions[0]['task_type']} if 'task_type' in predictions[0] else {}),
+        **({'model_name': predictions[0]['model_name']} if 'model_name' in predictions[0] else {}),
+        **({'id': predictions[0]['id']} if 'id' in predictions[0] else {}),
+    }
 
 def _upload_to_bucket(payload, no_compression=False):
     """
@@ -482,7 +613,7 @@ def upload_image_dataset(
     groundtruth_field=None,
     datapoints_metadata=None,
     image_ids=None,
-    class_names=None, dataset_tags=None,
+    class_names=None, dataset_metadata=None,
     max_batch_size=200, num_workers=20):
     """
     Upload an image dataset to Dioptra.
@@ -496,6 +627,9 @@ def upload_image_dataset(
         groundtruth_field: the name of the field containing the groundtruth
         datapoints_metadata:
             a list of metadata to be added to each datapoint.
+            should already be formatted.
+        dataset_metadata:
+            metadata to be added to each datapoint.
             should already be formatted.
         image_ids:
             a list of image ids. if present, this will be used to name teh images on S3
@@ -531,7 +665,7 @@ def upload_image_dataset(
     s3_prefix_bucket = os.environ.get('DIOPTRA_UPLOAD_PREFIX', '')
     storage_type = os.environ.get('DIOPTRA_UPLOAD_STORAGE_TYPE', 's3')
 
-    dataset_metadata = []
+    my_dataset_metadata = []
     img_payload = []
     upload_ids = []
 
@@ -580,10 +714,13 @@ def upload_image_dataset(
 
         if  my_metadata is not None and 'tags' in my_metadata:
             datapoint_tags.update(my_metadata['tags'])
-        if dataset_tags is not None:
-            datapoint_tags.update(dataset_tags)
         if  my_metadata is not None and 'image_metadata' in my_metadata:
             image_metadata.update(my_metadata['image_metadata'])
+
+        if  dataset_metadata is not None and 'tags' in dataset_metadata:
+            datapoint_tags.update(dataset_metadata['tags'])
+        if  dataset_metadata is not None and 'image_metadata' in dataset_metadata:
+            image_metadata.update(dataset_metadata['image_metadata'])
 
         image_metadata.update({
             'uri': img_url,
@@ -592,23 +729,24 @@ def upload_image_dataset(
         })
 
         img_payload.append((in_mem_file.getvalue(), img_url))
-        dataset_metadata.append({
+        my_dataset_metadata.append({
+            **(my_metadata if my_metadata is not None else {}),
+            **(dataset_metadata if dataset_metadata is not None else {}),
             'image_metadata': image_metadata,
+            **({'tags': datapoint_tags} if len(datapoint_tags) > 0 else {}),
             **({
                 'groundtruth': _format_groundtruth(row[groundtruth_field], dataset_type, class_names)
             } if groundtruth_field is not None else {}),
-            **(my_metadata if my_metadata is not None else {}),
-            **({'tags': datapoint_tags} if len(datapoint_tags) > 0 else {})
         })
 
         if len(img_payload) > max_batch_size:
             upload_ids.append(_upload_data(
-                dataset_metadata, img_payload, num_workers))
-            dataset_metadata = []
+                my_dataset_metadata, img_payload, num_workers))
+            my_dataset_metadata = []
             img_payload = []
 
     if len(img_payload) > 0:
         upload_ids.append(_upload_data(
-            dataset_metadata, img_payload, num_workers))
+            my_dataset_metadata, img_payload, num_workers))
 
     return upload_ids

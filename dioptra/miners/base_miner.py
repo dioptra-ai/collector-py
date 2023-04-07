@@ -51,11 +51,12 @@ class BaseMiner():
                 'x-api-key': self.api_key
             })
             r.raise_for_status()
-            task = r.json().get('task', {})
-            status = task.get('status', None)
+            response_json = r.json()
+            task = response_json['task']
+            status = task['status']
 
             if status == 'SUCCESS':
-                return task.get('result', [])
+                return task['result']
             elif status == 'FAILURE' or status == 'REVOKED':
                 raise RuntimeError('Miner failed')
             else:

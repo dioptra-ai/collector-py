@@ -55,7 +55,7 @@ class ImageDataset(Dataset):
         # Resolving the groundtruths field
         if 'groundtruths' in row:
             for groundtruth in row['groundtruths']:
-                if groundtruth['task_type'] == 'CLASSIFIER':
+                if groundtruth['task_type'] == 'CLASSIFICATION':
                     row['class_name'] = groundtruth['class_name']
                     break
                 if groundtruth['task_type'] == 'SEGMENTATION':

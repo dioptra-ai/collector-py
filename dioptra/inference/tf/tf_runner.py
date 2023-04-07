@@ -8,6 +8,7 @@ from dioptra.lake.utils import _format_prediction
 class TfInferenceRunner(InferenceRunner):
     def __init__(
             self, model, model_type,
+            model_name = None,
             embeddings_layers=[],
             logits_layer=None, class_names=[],
             metadata=None):
@@ -16,7 +17,7 @@ class TfInferenceRunner(InferenceRunner):
 
         Parameters:
             model: model to be used to inference
-            model_type: the type of the model use. Can be CLASSIFIER or SEMANTIC_SEGMENTATION
+            model_type: the type of the model use. Can be CLASSIFICATION or SEGMENTATION
             embeddings_layers: an array of layer names that should be used as embeddings. Can be a jq style path to an embedding layer like [0].my_embedding
             logits_layer: the name of the logit layer (pre softmax) to be used for AL. Can be a jq style path to an embedding layer like [0].my_logits
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
@@ -26,6 +27,7 @@ class TfInferenceRunner(InferenceRunner):
         super().__init__()
 
         self.model = model
+        self.model_name = model_name
         self.embeddings_layers = embeddings_layers
         self.logits_layer = logits_layer
         self.class_names = class_names
@@ -85,34 +87,26 @@ class TfInferenceRunner(InferenceRunner):
             records = []
 
     def _build_records(self, record_batch_idx, record_global_idx, output):
+        logits = None
+        if self.logits_layer is not None:
+            logits = output[self.logits_layer][record_batch_idx].numpy()
+        
+        embeddings = {}
+        for my_layer in self.embeddings_layers:
+            embeddings[my_layer] = output[my_layer][record_batch_idx].numpy()
 
-        my_record = {
+        return [{
             **({
                 'prediction': _format_prediction(
-                                output[self.logits_layer][record_batch_idx].numpy(),
-                                self.model_type,
-                                self.class_names)
-               } if self.logits_layer is not None and self.class_names is not None else {}
+                    logits=logits,
+                    embeddings=embeddings,
+                    task_type=self.model_type,
+                    model_name=self.model_name,
+                    class_names=self.class_names
+                )
+               } if logits or embeddings else {}
             ),
             **(self.metadata[record_global_idx] \
                if self.metadata and len(self.metadata) > record_global_idx else {}
             )
-        }
-
-        my_records = []
-
-        for my_layer in self.embeddings_layers:
-            record_tags = my_record.get('tags', {})
-            if 'embeddings_name' not in record_tags:
-                record_tags['embeddings_name'] = my_layer
-                my_record['tags'] = record_tags
-            layer_record = {
-                'embeddings': output[my_layer][record_batch_idx].numpy(),
-                **my_record
-            }
-            my_records.append(layer_record)
-
-        if len(my_records) == 0:
-            my_records.append(my_record)
-
-        return my_records
+        }]

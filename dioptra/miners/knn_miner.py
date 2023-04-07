@@ -3,12 +3,12 @@ from .base_miner import BaseMiner
 
 class KNNMiner(BaseMiner):
     def __init__(
-            self, display_name, size, embeddings_field, select_filters,
-            select_reference_filters, metric='euclidean',
+            self, display_name, size, select_filters, model_name,
+            embeddings_field='EMBEDDINGS', metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
-            select_reference_limit=None,
+            select_reference_filters=None, select_reference_limit=None,
             select_reference_order_by=None, select_reference_desc=None,
-            skip_caching=False):
+            skip_caching=True):
         """
         KNN miner
         Will perform a AL query based on CoreSet
@@ -41,6 +41,7 @@ class KNNMiner(BaseMiner):
                 'metric': metric,
                 'size': size,
                 'embeddings_field': embeddings_field,
+                'model_name': model_name,
                 'select': {
                     'filters': select_filters,
                     **({'limit': select_limit} if select_limit is not None else {}),
