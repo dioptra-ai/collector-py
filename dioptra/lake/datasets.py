@@ -21,6 +21,10 @@ def list_datasets():
 
     return dataset_list
 
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+
 class Dataset():
 
     def __init__(self):
@@ -30,7 +34,6 @@ class Dataset():
             raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
         self.api_key = api_key
-        self.app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
         self.dataset_id = None
         self.dataset_name = None
 
@@ -42,7 +45,7 @@ class Dataset():
             uuid: uuid of the dataset
         """
         try:
-            r = requests.get(f'{self.app_endpoint}/api/dataset/{uuid}', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{uuid}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -93,7 +96,7 @@ class Dataset():
         """
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/dataset', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/dataset', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
@@ -115,7 +118,7 @@ class Dataset():
         """
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/commit', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/commit', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
@@ -136,7 +139,7 @@ class Dataset():
         """
 
         try:
-            r = requests.get(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/versions', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/versions', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -158,7 +161,7 @@ class Dataset():
         """
 
         try:
-            r = requests.get(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/datapoints', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/datapoints', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -179,7 +182,7 @@ class Dataset():
         """
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/add', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/add', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
@@ -200,7 +203,7 @@ class Dataset():
         """
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/remove', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/remove', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             }, json={
@@ -222,7 +225,7 @@ class Dataset():
         """
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/dataset/{self.dataset_id}/checkout/{commit_id}', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}/checkout/{commit_id}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -241,7 +244,7 @@ class Dataset():
         """
 
         try:
-            r = requests.delete(f'{self.app_endpoint}/api/dataset/{self.dataset_id}', headers={
+            r = requests.delete(f'{DIOPTRA_APP_ENDPOINT}/api/dataset/{self.dataset_id}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })

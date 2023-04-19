@@ -71,6 +71,22 @@ class ImageDataset(Dataset):
                     if row['segmentation_class_mask'] is not None:
                         row['segmentation_class_mask'] = row['segmentation_class_mask'].astype(np.int32)
                     break
+                if groundtruth['task_type'] == 'INSTANCE_SEGMENTATION':
+                    if 'bboxes' in groundtruth and groundtruth['bboxes'] is not None:
+                        row['polygons'] = [
+                            {
+                                **({'class_name': bbox['class_name']} if bbox is not None and 'class_name' in bbox and bbox['class_name'] is not None else {}),
+                                **({'coco_polygon': bbox['coco_polygon']} if  bbox is not None and 'coco_polygon' in bbox and bbox['coco_polygon'] is not None else {})
+                            } for bbox in groundtruth['bboxes']]
+                    break
+                if groundtruth['task_type'] == 'LANE_DETECTION':
+                    if 'lanes' in groundtruth and groundtruth['lanes'] is not None:
+                        row['lanes'] = [
+                            {
+                                **({'class_name': lane['class_name']} if lane is not None and 'class_name' in lane and lane['class_name'] is not None else {}),
+                                **({'coco_polygon': lane['coco_polygon']} if lane is not None and 'coco_polygon' in lane and lane['coco_polygon'] is not None else {})
+                            } for lane in groundtruth['lanes']]
+                    break
 
         if self.transform is not None and not is_prefetch:
             return self.transform(row)

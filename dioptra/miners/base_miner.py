@@ -2,6 +2,10 @@ import os
 import requests
 import time
 
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+
 class BaseMiner():
 
     def __init__(self):
@@ -11,14 +15,13 @@ class BaseMiner():
             raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
         self.api_key = api_key
-        self.app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
         self.miner_id = None
         self.miner_name = None
 
     def get_status(self):
 
         try:
-            r = requests.get(f'{self.app_endpoint}/api/tasks/miners/inspect/{self.miner_id}', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners/inspect/{self.miner_id}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -30,7 +33,7 @@ class BaseMiner():
 
     def get_config(self):
 
-        r = requests.get(f'{self.app_endpoint}/api/tasks/miners/{self.miner_id}', headers={
+        r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners/{self.miner_id}', verify=DIOPTRA_SSL_VERIFY, headers={
             'content-type': 'application/json',
             'x-api-key': self.api_key
         })
@@ -38,7 +41,7 @@ class BaseMiner():
 
         return r.json()
 
-    def get_results(self):
+    def get_results(self, retry_on_empty_success=True):
         sleepTimeSecs = 1
         totalSleepTimeSecs = 0
 
@@ -46,7 +49,7 @@ class BaseMiner():
             if totalSleepTimeSecs > 3600:
                 raise RuntimeError('Timed out waiting for miner results')
                 
-            r = requests.get(f'{self.app_endpoint}/api/tasks/miners/inspect/{self.miner_id}', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners/inspect/{self.miner_id}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             })
@@ -54,9 +57,18 @@ class BaseMiner():
             response_json = r.json()
             task = response_json['task']
             status = task['status']
-
             if status == 'SUCCESS':
-                return task['result']
+
+                results =  task['result']
+                # TODO: remove this.
+                if results is None:
+                    results = []
+                if len(results) == 0 and retry_on_empty_success:
+                    time.sleep(10)
+                    return self.get_results(retry_on_empty_success=False)
+                else:
+                    return results
+
             elif status == 'FAILURE' or status == 'REVOKED':
                 raise RuntimeError('Miner failed')
             else:
@@ -67,7 +79,7 @@ class BaseMiner():
     def run(self):
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miner/run', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miner/run', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },
@@ -80,7 +92,7 @@ class BaseMiner():
     def delete(self):
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miners/delete', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners/delete', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },
@@ -93,7 +105,7 @@ class BaseMiner():
     def reset(self):
 
         try:
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miner/reset', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miner/reset', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },

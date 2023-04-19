@@ -1,10 +1,15 @@
 import requests
 from .base_miner import BaseMiner
 
+import os
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+
 class CoresetMiner(BaseMiner):
     def __init__(
-            self, display_name, size, select_filters, model_name,
-            embeddings_field='EMBEDDINGS', metric='euclidean',
+            self, display_name, size, select_filters, model_name=None,
+            embeddings_field='embeddings', metric='euclidean',
             select_limit=None, select_order_by=None, select_desc=None,
             select_reference_filters=None, select_reference_limit=None,
             select_reference_order_by=None, select_reference_desc=None,
@@ -16,7 +21,7 @@ class CoresetMiner(BaseMiner):
         Parameters:
             display_name: name to be displayed in Dioptra
             size: number of datapoints to query
-            embeddings_field: embedding fields to run the analysis on. Could be 'embeddings' 'prediction.embeddings'
+            embeddings_field: embedding fields to run the analysis on. Could be 'embeddings'
             select_filters: dioptra style filters to select the data to be queried from
             select_limit: limit to selected the data
             select_order_by: field to use to sort the data to control how limit is performed
@@ -30,7 +35,7 @@ class CoresetMiner(BaseMiner):
 
         super().__init__()
         try:
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },

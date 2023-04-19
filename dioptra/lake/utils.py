@@ -22,24 +22,34 @@ import tqdm
 import orjson
 import mgzip
 
+from . import ingestion
+
 # TODO: figure out how to return status codes form lambda functions.
 # See the wip_return_error_code branch of the infrastructure repo.
 def _raise_for_apigateway_errormessage(response):
     if response is not None and 'errorMessage' in response:
         raise RuntimeError(response['errorMessage'])
 
-def query_dioptra_app(method, path, body=None):
+DIOPTRA_API_ENDPOINT = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+DIOPTRA_API_KEY = os.environ.get('DIOPTRA_API_KEY', None)
+
+def query_dioptra_app(method, path, json=None, files=None):
     api_key = os.environ.get('DIOPTRA_API_KEY', None)
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
-    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
     r = None
     try:
-        r = getattr(requests, method.lower())(f'{app_endpoint}{path}', headers={
-            'content-type': 'application/json',
-            'x-api-key': api_key
-        }, json=body)
+        r = getattr(requests, method.lower())(
+            url=f'{DIOPTRA_APP_ENDPOINT}{path}',
+            verify=DIOPTRA_SSL_VERIFY,
+            headers={'x-api-key': api_key},
+            json=json,
+            files=files
+        )
         r.raise_for_status()
     except requests.exceptions.RequestException as err:
         if r is None:
@@ -126,6 +136,21 @@ def select_groundtruths(filters, limit=None, order_by=None, desc=None, fields=['
         }
     ))
 
+def select_bboxes(filters, limit=None, order_by=None, desc=None, fields=['*'], offset=0):
+
+    return pd.DataFrame(query_dioptra_app(
+        'POST',
+        '/api/bboxes/select',
+        {
+            'selectColumns': fields,
+            'filters': filters,
+            **({'limit': limit} if limit is not None else {}),
+            **({'orderBy': order_by} if order_by is not None else {}),
+            **({'desc': desc} if desc is not None else {}),
+            'offset': offset
+        }
+    ))
+
 def delete_predictions(prediction_ids):
     """
     Delete predictions from the data lake
@@ -177,9 +202,9 @@ def delete_datapoints(filters, limit=None, order_by=None, desc=None):
         }
     )
 
-def upload_to_lake(records):
+def stream_to_lake(records):
     """
-    Uploading metadata to the data lake
+    Uploading metadata to the data lake. Maximum payload ~1MB.
 
     Parameters:
         records: array of dipotra style records. See teh doc for accepted formats
@@ -189,14 +214,13 @@ def upload_to_lake(records):
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
-    api_endpoint = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
-
     try:
-        r = requests.post(api_endpoint, headers={
+        r = requests.post(DIOPTRA_API_ENDPOINT, verify=DIOPTRA_SSL_VERIFY, headers={
             'content-type': 'application/json',
-            'x-api-key': api_key
+            'x-api-key': api_key,
+            'host': 'api.dioptra.ai'
         }, json={
-            'records': records
+            'records': ingestion.process_records(records)
         })
         r.raise_for_status()
         response = r.json()
@@ -206,6 +230,24 @@ def upload_to_lake(records):
         raise err
 
     return response
+
+def upload_to_lake(records, disable_batching=False):
+    # Send records as ndjson in a multipart POST query to /api/ingestion/upload
+    # on the dioptra app endpoint.
+    file_upload = query_dioptra_app('POST', '/api/ingestion/upload', files={
+        'file': ('records.ndjson', '\r'.join([json.dumps(r) for r in records]))
+    })
+
+    data_upload = query_dioptra_app('POST', '/api/ingestion/ingest',
+        {'url': file_upload['url']} if disable_batching else {'urls': [file_upload['url']]}
+    )
+
+    if 'id' in data_upload:
+        print(f'Uploaded {len(records)} records to the lake. View the upload status at {DIOPTRA_APP_ENDPOINT}/settings/uploads/{data_upload["id"]}')
+    else:
+        print(f'Uploaded {len(records)} records to the lake. Upload status: {data_upload}')
+
+    return data_upload
 
 def upload_to_lake_via_object_store(records, custom_path='', disable_batching=False, offset=None, limit=None):
     """
@@ -233,7 +275,8 @@ def upload_to_lake_via_object_store(records, custom_path='', disable_batching=Fa
         prefix, custom_path, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz').strip('/')
     store_url = f'{storage_type}://{os.path.join(object_store_bucket, file_name)}'
 
-    compressed_payload = _build_compressed_payload(records)
+    records = ingestion.process_records(records)
+    compressed_payload = _compress_to_ndjson(records)
 
     _upload_to_bucket((compressed_payload, store_url), no_compression=True)
 
@@ -255,15 +298,15 @@ def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disa
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
-    api_endpoint = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
     if storage_type == 's3':
         signed_url = _generate_s3_signed_url(bucket_name, object_name)
     elif storage_type == 'gs':
         signed_url = _generate_gs_signed_url(bucket_name, object_name)
     try:
-        r = requests.post(api_endpoint, headers={
+        r = requests.post(DIOPTRA_API_ENDPOINT, verify=DIOPTRA_SSL_VERIFY, headers={
             'content-type': 'application/json',
-            'x-api-key': api_key
+            'x-api-key': api_key,
+            'host': 'api.dioptra.ai'
         }, json={
             'url': signed_url,
             'offset': offset,
@@ -297,7 +340,7 @@ def store_to_local_cache(records):
 
     file_name = os.path.join(cache_dir, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz')
 
-    compressed_payload = _build_compressed_payload(records)
+    compressed_payload = _compress_to_ndjson(records)
 
     with open(file_name, 'wb') as f:
         f.write(compressed_payload)
@@ -318,7 +361,6 @@ def wait_for_upload(upload_id):
     if api_key is None:
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
-    app_endpoint = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
     sleepTimeSecs = 1
     totalSleepTimeSecs = 0
     try:
@@ -326,7 +368,7 @@ def wait_for_upload(upload_id):
             if totalSleepTimeSecs > 900:
                 raise RuntimeError('Timed out waiting for the upload to finish.')
 
-            r = requests.get(f'{app_endpoint}/api/ingestion/executions/{upload_id}', headers={
+            r = requests.get(f'{DIOPTRA_APP_ENDPOINT}/api/ingestion/executions/{upload_id}', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': api_key
             })
@@ -336,7 +378,7 @@ def wait_for_upload(upload_id):
                 return upload
             elif upload['status'] in ['FAILED', 'TIMED_OUT', 'ABORTED']:
                 raise RuntimeError(
-                    f'Upload failed with status {upload["status"]}. See more information in the Dioptra UI: {app_endpoint}/settings/uploads/{upload_id}')
+                    f'Upload failed with status {upload["status"]}. See more information in the Dioptra UI: {DIOPTRA_APP_ENDPOINT}/settings/uploads/{upload_id}')
             else:
                 time.sleep(sleepTimeSecs)
                 totalSleepTimeSecs += sleepTimeSecs
@@ -363,6 +405,9 @@ def _generate_s3_signed_url(bucket_name, object_name):
 def _generate_gs_signed_url(bucket_name, object_name):
 
     cred_file = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', None)
+    if cred_file is None:
+        raise RuntimeError('GOOGLE_APPLICATION_CREDENTIALS env var is not set. See the documentation for more information: https://dioptra.gitbook.io/dioptra-doc/EIKhoPaxsbOt062jkPon/overview/lake-ml/configuring-object-stores')
+
     with open(cred_file, 'r') as f:
         credentials = json.load(f)
     gcs_client = storage.Client.from_service_account_info(credentials)
@@ -397,10 +442,10 @@ def _list_miner_metadata():
     return query_dioptra_app('GET', '/api/tasks/miners')
 
 
-def _build_compressed_payload(records):
+def _compress_to_ndjson(records):
     payload = b'\n'.join(
         [orjson.dumps(record, option=orjson.OPT_SERIALIZE_NUMPY)for record in records])
-    return mgzip.compress(payload, compresslevel=2)
+    return mgzip.compress(payload, compresslevel=9)
 
 def join_on_datapoints(datapoints, groundtruths=None, predictions=None):
     """
@@ -557,7 +602,10 @@ def _format_groundtruth(groundtruth, task_type, class_names=None, groundtruth_id
             **({'id': groundtruth_id} if groundtruth_id is not None else {})
         }
 
-def _format_prediction(logits, embeddings, task_type, model_name, class_names=None, prediction_id=None):
+def _format_prediction(
+        logits, embeddings, task_type, model_name, transformed_logits=None, grad_embeddings=None,
+        class_names=None, prediction_id=None, channel_last=False
+        ):
     """
     Utility formatting the prediction field.
 
@@ -565,23 +613,65 @@ def _format_prediction(logits, embeddings, task_type, model_name, class_names=No
         logits: the prediction logits (before softmax)
         embeddings: a dictionary containing the embeddings by layer names, or a single embeddings vector.
         task_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
-        class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
+        class_names: a list of class names.
+            If the groundtruth contains indexes, it will be used to convert them to names
         prediction_id: the id of the prediction to be updated
+        channel_last: if the logits and embeddings are in channel last format
     """
-    if getattr(logits, 'numpy', None) is not None: # dealing with Tensorflow Tensors
+    if getattr(logits, 'cpu', None) is not None: # dealing with Torch Tensors
+        logits = logits.cpu()
+    if getattr(logits, 'numpy', None) is not None: # dealing with Torch & Tensorflow Tensors
         logits = logits.numpy()
 
-    if not isinstance(logits, np.ndarray):
-        logits = np.array(logits)
-    logits = logits.astype(np.float16).tolist()
+    if logits is not None:
+        if not isinstance(logits, np.ndarray):
+            logits = np.array(logits)
+        logits = logits.astype(np.float16)
+
+        if channel_last:
+            logits = np.moveaxis(logits, -1, 0)
+
+        logits = logits.tolist()
+
+    my_embeddings = {}
+    if embeddings is not None and len(embeddings) > 0:
+        for k, v in embeddings.items():
+            if getattr(v, 'cpu', None) is not None: # dealing with Torch Tensors
+                v = v.cpu()
+            if getattr(v, 'numpy', None) is not None: # dealing with Torch & Tensorflow Tensors
+                v = v.numpy()
+            if not isinstance(v, np.ndarray):
+                v = np.array(v)
+            my_embeddings[k] = v.astype(np.float16).tolist() if not channel_last \
+                else np.moveaxis(v.astype(np.float16), -1, 0).tolist()
+
+    if grad_embeddings is not None and len(grad_embeddings) > 0:
+        my_grad_embeddings = {}
+        for k, v in grad_embeddings.items():
+            if getattr(v, 'cpu', None) is not None:
+                v = v.cpu()
+            if getattr(v, 'numpy', None) is not None:
+                v = v.numpy()
+            if not isinstance(v, np.ndarray):
+                v = np.array(v)
+            my_grad_embeddings[k] = v.astype(np.float16).tolist()
 
     if task_type in ['CLASSIFICATION', 'SEGMENTATION']:
         return {
             'task_type': task_type,
-            'logits': logits,
-            'embeddings': embeddings,
             'model_name': model_name,
+            **({'embeddings': my_embeddings} if my_embeddings is not None and len(my_embeddings) > 0 else {}),
+            **({'logits': logits} if logits is not None else {}),
             **({'class_names': class_names} if class_names is not None else {}),
+            **({'id': prediction_id} if prediction_id is not None else {})
+        }
+    if task_type == 'LANE_DETECTION':
+        return {
+            'task_type': task_type,
+            'model_name': model_name,
+            **({'lanes': transformed_logits['lanes']} if transformed_logits['lanes'] is not None and len(transformed_logits['lanes']) > 0 else {}),
+            **({'embeddings': my_embeddings} if my_embeddings is not None and len(my_embeddings) > 0 else {}),
+            **({'grad_embeddings': my_grad_embeddings} if my_grad_embeddings is not None and len(my_grad_embeddings) > 0 else {}),
             **({'id': prediction_id} if prediction_id is not None else {})
         }
 
@@ -589,6 +679,7 @@ def _resolve_mc_drop_out_predictions(predictions):
     return {
         **({'encoded_logits': [p['encoded_logits'] for p in predictions]} if 'encoded_logits' in predictions[0] else {}),
         **({'embeddings': predictions[0]['embeddings']} if 'embeddings' in predictions[0] else {}),
+        **({'grad_embeddings': predictions[0]['grad_embeddings']} if 'grad_embeddings' in predictions[0] else {}),
         **({'logits': [p['logits'] for p in predictions]} if 'logits' in predictions[0] else {}),
         **({'class_names': predictions[0]['class_names']} if 'class_names' in predictions[0] else {}),
         **({'task_type': predictions[0]['task_type']} if 'task_type' in predictions[0] else {}),

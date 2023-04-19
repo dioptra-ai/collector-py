@@ -16,7 +16,10 @@ class TorchInferenceRunner(InferenceRunner):
             datapoints_metadata=None,
             dataset_metadata=None,
             data_transform=None,
+            grad_embeddings_transform=None,
+            logits_transform=None,
             mc_dropout_samples=0,
+            channel_last=False,
             device='cpu'):
         """
         Utility to perform model inference on a dataset and extract layers needed for AL.
@@ -33,6 +36,7 @@ class TorchInferenceRunner(InferenceRunner):
             dataset_metadata: a dioptra style dataset metadata to be added to the dataset
             data_transform: a transform function that will be called before the model is called. Should only return the data, without the groundtruth
             device: the devide to be use to perform the inference
+            channel_last: if the model expects the data to be in channel last format
         """
 
         super().__init__()
@@ -46,14 +50,12 @@ class TorchInferenceRunner(InferenceRunner):
         self.datapoints_metadata = datapoints_metadata
         self.dataset_metadata = dataset_metadata
         self.data_transform = data_transform
+        self.logits_transform = logits_transform
+        self.grad_embeddings_transform = grad_embeddings_transform
         self.device = device
         self.model_type = model_type
         self.mc_dropout_samples = mc_dropout_samples
-
-        if mc_dropout_samples > 0:
-            for m in self.model.modules():
-                if m.__class__.__name__.startswith('Dropout'):
-                    m.train()
+        self.channel_last = channel_last
 
         self.activation = {}
 
@@ -66,7 +68,7 @@ class TorchInferenceRunner(InferenceRunner):
         split = name.split('.')
         current_layer = self.model
         for part in split:
-            if re.match('\[[0-9]+\]', part):
+            if re.match('\[[0-9-]+\]', part):
                 index = int(part.replace('[', '').replace(']', ''))
                 current_layer = current_layer[index]
             else:
@@ -91,12 +93,18 @@ class TorchInferenceRunner(InferenceRunner):
                 Should not be shuffled if used with a datapoints_metadata list
         """
 
-        self.model.eval()
+        if self.mc_dropout_samples == 0:
+            self.model.eval()
+        else:
+            self.model.train()
+
         self.model.to(self.device)
 
         records = []
 
         global_idx = 0
+        nb_samples = 1 if self.mc_dropout_samples == 0 else self.mc_dropout_samples
+
         if hasattr(dataloader, 'dataset'):
             dataset_size = len(dataloader.dataset) # we are using a dataloader
         else:
@@ -105,8 +113,6 @@ class TorchInferenceRunner(InferenceRunner):
             if self.data_transform:
                 batch = self.data_transform(batch)
             batch = batch.to(self.device)
-
-            nb_samples = 1 if self.mc_dropout_samples == 0 else self.mc_dropout_samples
             samples_records = []
 
             for _ in range(nb_samples):
@@ -140,22 +146,33 @@ class TorchInferenceRunner(InferenceRunner):
 
         logits = None
         if self.logits_layer in self.activation:
-            logits = self.activation[self.logits_layer][record_batch_idx].cpu().numpy()
+            logits = self.activation[self.logits_layer][record_batch_idx]
+
+        transformed_logits = None
+        if logits is not None and self.logits_transform is not None:
+            transformed_logits = self.logits_transform(logits)
+
+        grad_embeddings = None
+        if transformed_logits is not None and self.grad_embeddings_transform is not None:
+            grad_embeddings = self.grad_embeddings_transform(transformed_logits)
 
         embeddings = {}
         for my_layer in self.embeddings_layers:
             if my_layer not in self.activation:
                 continue
-            embeddings[my_layer] = self.activation[my_layer][record_batch_idx].cpu().numpy()
+            embeddings[my_layer] = self.activation[my_layer][record_batch_idx]
 
         return [{
             **({
                 'prediction': _format_prediction(
                     logits=logits,
+                    transformed_logits=transformed_logits,
+                    grad_embeddings=grad_embeddings,
                     embeddings=embeddings,
                     task_type=self.model_type,
                     model_name=self.model_name,
-                    class_names=self.class_names
+                    class_names=self.class_names,
+                    channel_last=self.channel_last
                 )
                } if logits is not None or embeddings is not None else {}
             ),

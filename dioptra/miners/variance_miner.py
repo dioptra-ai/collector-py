@@ -1,6 +1,11 @@
 import requests
 from .base_miner import BaseMiner
 
+import os
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+
 class VarianceMiner(BaseMiner):
     def __init__(
             self, display_name, size, select_filters,
@@ -19,7 +24,7 @@ class VarianceMiner(BaseMiner):
 
         super().__init__()
         try:
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },

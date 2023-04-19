@@ -1,10 +1,15 @@
 import requests
 from .base_miner import BaseMiner
 
+import os
+DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+# We ask for a definitive signal to disable but using the positive form is easier in code.
+DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
+
 class RandomMiner(BaseMiner):
     def __init__(
             self, display_name, size, select_filters,
-            select_limit=None, select_order_by=None, select_desc=None):
+            select_limit=None, select_order_by=None, select_desc=None, model_name=None):
         """
         Random miner
         Will perform a random query
@@ -21,7 +26,7 @@ class RandomMiner(BaseMiner):
         super().__init__()
         try:
 
-            r = requests.post(f'{self.app_endpoint}/api/tasks/miners', headers={
+            r = requests.post(f'{DIOPTRA_APP_ENDPOINT}/api/tasks/miners', verify=DIOPTRA_SSL_VERIFY, headers={
                 'content-type': 'application/json',
                 'x-api-key': self.api_key
             },
@@ -29,6 +34,7 @@ class RandomMiner(BaseMiner):
                 'display_name': display_name,
                 'strategy': 'RANDOM',
                 'size': size,
+                'model_name': model_name,
                 'select': {
                     'filters': select_filters,
                     **({'limit': select_limit} if select_limit is not None else {}),
