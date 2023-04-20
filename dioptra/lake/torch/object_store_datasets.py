@@ -1,13 +1,16 @@
 import os
 import pickle
-import tqdm
+from functools import partial
 from multiprocessing import Pool
-from torch.utils.data import Dataset
 import hashlib
+
+import tqdm
+from torch.utils.data import Dataset
 import smart_open
 from PIL import Image
 import numpy as np
-from functools import partial
+import yaml
+
 from dioptra.lake.utils import _decode_to_np_array
 
 class ImageDataset(Dataset):
@@ -136,3 +139,73 @@ class ImageDataset(Dataset):
                 desc='Prefetching your images ...',
                 ncols=100
             ))
+
+    def _export_record(self, index, path, format, class_names):
+        processed_row = self.__getitem__(index)
+
+        if format == 'yolov7':
+            if 'image' not in processed_row or \
+                    'polygons' not in processed_row or \
+                    'metadata' not in processed_row or \
+                    'uri' not in processed_row['metadata'] or \
+                    'width' not in processed_row['metadata'] or \
+                    'height' not in processed_row['metadata']:
+                return
+
+            datapoint_hash = hashlib.md5(processed_row['metadata']['uri'].encode()).hexdigest()
+            img_name = os.path.basename(processed_row['metadata']['uri'])
+            img_name, img_ext = os.path.splitext(os.path.basename(processed_row['metadata']['uri']))
+            datapoint_name = f'{datapoint_hash}_{img_name}'
+            img_width = processed_row['metadata']['width']
+            img_height = processed_row['metadata']['height']
+            img_path = os.path.join(path, 'images' , datapoint_name + img_ext)
+            processed_row['image'].save(img_path)
+
+            with open(os.path.join(path, 'labels' , datapoint_name + '.txt'), 'w') as file:
+                file.write('')
+
+            for polygon in processed_row['polygons']:
+                if 'class_name' not in polygon or 'coco_polygon' not in polygon:
+                    continue
+                if polygon['class_name'] not in class_names:
+                    continue
+                class_index = class_names.index(polygon['class_name'])
+                normalized_polygon = [
+                    str(value / img_width) if index % 2 else str(value / img_height) for index, value in enumerate(polygon['coco_polygon'])]
+                with open(os.path.join(path, 'labels' , datapoint_name + '.txt'), 'a') as file:
+                    file.write(f'{class_index} {" ".join(normalized_polygon)}\n')
+
+
+    def export(self, path, format, class_names, num_workers=1):
+        """
+        Export the dataset to a given format
+        Parameters:
+            path: path to the file to be exported
+            format: format of the file to be exported
+            class_names: list of class names to be used in the export
+            num_workers: number of processors to be used
+
+        """
+        if format != 'yolov7':
+            raise NotImplementedError(f'Exporting to {format} is not implemented yet')
+        if os.path.exists(path):
+            raise RuntimeError(f'Dir {path} already exists')
+
+        if format == 'yolov7':
+            os.makedirs(path)
+            os.makedirs(os.path.join(path, 'images'))
+            os.makedirs(os.path.join(path, 'labels'))
+
+            self.use_caching = False
+            self.transform = None
+
+            with Pool(num_workers) as my_pool:
+                list(tqdm.tqdm(
+                    my_pool.imap(partial(self._export_record, path=path, format=format, class_names=class_names), range(self.__len__())),
+                    total=self.__len__(),
+                    desc='Exporting your dataset ...',
+                    ncols=100
+                ))
+
+            with open(os.path.join(path, 'data.yaml'), 'w') as file:
+                yaml.dump({'names': class_names}, file)

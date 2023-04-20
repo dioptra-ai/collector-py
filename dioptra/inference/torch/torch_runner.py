@@ -80,7 +80,7 @@ class TorchInferenceRunner(InferenceRunner):
             if hasattr(output, 'last_hidden_state'):
                 self.activation[name] = output.last_hidden_state
             else:
-                self.activation[name] = output.detach()
+                self.activation[name] = output
         return hook
 
     def run(self, dataloader):

@@ -22,7 +22,6 @@ import tqdm
 import orjson
 import mgzip
 
-from . import ingestion
 
 # TODO: figure out how to return status codes form lambda functions.
 # See the wip_return_error_code branch of the infrastructure repo.
@@ -220,7 +219,7 @@ def stream_to_lake(records):
             'x-api-key': api_key,
             'host': 'api.dioptra.ai'
         }, json={
-            'records': ingestion.process_records(records)
+            'records': records
         })
         r.raise_for_status()
         response = r.json()
@@ -275,7 +274,6 @@ def upload_to_lake_via_object_store(records, custom_path='', disable_batching=Fa
         prefix, custom_path, f'{str(uuid.uuid4())}_{datetime.utcnow().isoformat()}.ndjson.gz').strip('/')
     store_url = f'{storage_type}://{os.path.join(object_store_bucket, file_name)}'
 
-    records = ingestion.process_records(records)
     compressed_payload = _compress_to_ndjson(records)
 
     _upload_to_bucket((compressed_payload, store_url), no_compression=True)
@@ -618,6 +616,8 @@ def _format_prediction(
         prediction_id: the id of the prediction to be updated
         channel_last: if the logits and embeddings are in channel last format
     """
+    if getattr(logits, 'detach', None) is not None: # dealing with Torch Tensors
+        logits = logits.detach()
     if getattr(logits, 'cpu', None) is not None: # dealing with Torch Tensors
         logits = logits.cpu()
     if getattr(logits, 'numpy', None) is not None: # dealing with Torch & Tensorflow Tensors
@@ -636,6 +636,8 @@ def _format_prediction(
     my_embeddings = {}
     if embeddings is not None and len(embeddings) > 0:
         for k, v in embeddings.items():
+            if getattr(v, 'detach', None) is not None: # dealing with Torch Tensors
+                v = v.detach()
             if getattr(v, 'cpu', None) is not None: # dealing with Torch Tensors
                 v = v.cpu()
             if getattr(v, 'numpy', None) is not None: # dealing with Torch & Tensorflow Tensors
@@ -648,6 +650,8 @@ def _format_prediction(
     if grad_embeddings is not None and len(grad_embeddings) > 0:
         my_grad_embeddings = {}
         for k, v in grad_embeddings.items():
+            if getattr(v, 'detach', None) is not None:
+                v = v.detach()
             if getattr(v, 'cpu', None) is not None:
                 v = v.cpu()
             if getattr(v, 'numpy', None) is not None:
