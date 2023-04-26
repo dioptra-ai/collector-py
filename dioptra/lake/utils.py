@@ -29,12 +29,6 @@ def _raise_for_apigateway_errormessage(response):
     if response is not None and 'errorMessage' in response:
         raise RuntimeError(response['errorMessage'])
 
-DIOPTRA_API_ENDPOINT = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
-DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
-# We ask for a definitive signal to disable but using the positive form is easier in code.
-DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
-DIOPTRA_API_KEY = os.environ.get('DIOPTRA_API_KEY', None)
-
 def query_dioptra_app(method, path, json=None, files=None):
     api_key = os.environ.get('DIOPTRA_API_KEY', None)
     if api_key is None:
@@ -42,6 +36,9 @@ def query_dioptra_app(method, path, json=None, files=None):
 
     r = None
     try:
+        # This here to cater to the notebook people who set their env variables at runtime...
+        DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+        DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
         r = getattr(requests, method.lower())(
             url=f'{DIOPTRA_APP_ENDPOINT}{path}',
             verify=DIOPTRA_SSL_VERIFY,
@@ -150,7 +147,7 @@ def select_bboxes(filters, limit=None, order_by=None, desc=None, fields=['*'], o
         }
     ))
 
-def delete_predictions(prediction_ids):
+def delete_predictions(filters, order_by=None, desc=None, limit=None, offset=0):
     """
     Delete predictions from the data lake
 
@@ -162,11 +159,15 @@ def delete_predictions(prediction_ids):
         'POST',
         '/api/predictions/delete',
         {
-            'predictionIds': prediction_ids
+            'filters': filters,
+            'orderBy': order_by,
+            'desc': desc,
+            'limit': limit,
+            'offset': offset
         }
     )
 
-def delete_groundtruths(groundtruth_ids):
+def delete_groundtruths(filters, order_by=None, desc=None, limit=None, offset=0):
     """
     Delete groundtruths from the data lake
 
@@ -178,11 +179,15 @@ def delete_groundtruths(groundtruth_ids):
         'POST',
         '/api/groundtruths/delete',
         {
-            'groundtruthIds': groundtruth_ids
+            'filters': filters,
+            'orderBy': order_by,
+            'desc': desc,
+            'limit': limit,
+            'offset': offset
         }
     )
 
-def delete_datapoints(filters, limit=None, order_by=None, desc=None):
+def delete_datapoints(filters, order_by=None, desc=None, limit=None, offset=0):
     """
     Delete metadata from the data lake
 
@@ -197,7 +202,11 @@ def delete_datapoints(filters, limit=None, order_by=None, desc=None):
         'POST',
         '/api/datapoints/delete',
         {
-            'filters': filters
+            'filters': filters,
+            'orderBy': order_by,
+            'desc': desc,
+            'limit': limit,
+            'offset': offset
         }
     )
 
@@ -214,6 +223,8 @@ def stream_to_lake(records):
         raise RuntimeError('DIOPTRA_API_KEY env var is not set')
 
     try:
+        DIOPTRA_API_ENDPOINT = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
+        DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
         r = requests.post(DIOPTRA_API_ENDPOINT, verify=DIOPTRA_SSL_VERIFY, headers={
             'content-type': 'application/json',
             'x-api-key': api_key,
@@ -242,6 +253,7 @@ def upload_to_lake(records, disable_batching=False):
     )
 
     if 'id' in data_upload:
+        DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
         print(f'Uploaded {len(records)} records to the lake. View the upload status at {DIOPTRA_APP_ENDPOINT}/settings/uploads/{data_upload["id"]}')
     else:
         print(f'Uploaded {len(records)} records to the lake. Upload status: {data_upload}')
@@ -301,6 +313,8 @@ def upload_to_lake_from_bucket(bucket_name, object_name, storage_type='s3', disa
     elif storage_type == 'gs':
         signed_url = _generate_gs_signed_url(bucket_name, object_name)
     try:
+        DIOPTRA_API_ENDPOINT = os.environ.get('DIOPTRA_API_ENDPOINT', 'https://api.dioptra.ai/events')
+        DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
         r = requests.post(DIOPTRA_API_ENDPOINT, verify=DIOPTRA_SSL_VERIFY, headers={
             'content-type': 'application/json',
             'x-api-key': api_key,
@@ -361,6 +375,8 @@ def wait_for_upload(upload_id):
 
     sleepTimeSecs = 1
     totalSleepTimeSecs = 0
+    DIOPTRA_APP_ENDPOINT = os.environ.get('DIOPTRA_APP_ENDPOINT', 'https://app.dioptra.ai')
+    DIOPTRA_SSL_VERIFY = not os.environ.get('DIOPTRA_SSL_NOVERIFY', 'False') == 'True'
     try:
         while True:
             if totalSleepTimeSecs > 900:
@@ -633,8 +649,9 @@ def _format_prediction(
 
         logits = logits.tolist()
 
-    my_embeddings = {}
+    my_embeddings = None
     if embeddings is not None and len(embeddings) > 0:
+        my_embeddings = {}
         for k, v in embeddings.items():
             if getattr(v, 'detach', None) is not None: # dealing with Torch Tensors
                 v = v.detach()
@@ -647,6 +664,7 @@ def _format_prediction(
             my_embeddings[k] = v.astype(np.float16).tolist() if not channel_last \
                 else np.moveaxis(v.astype(np.float16), -1, 0).tolist()
 
+    my_grad_embeddings = None
     if grad_embeddings is not None and len(grad_embeddings) > 0:
         my_grad_embeddings = {}
         for k, v in grad_embeddings.items():
@@ -678,7 +696,15 @@ def _format_prediction(
             **({'grad_embeddings': my_grad_embeddings} if my_grad_embeddings is not None and len(my_grad_embeddings) > 0 else {}),
             **({'id': prediction_id} if prediction_id is not None else {})
         }
-
+    if task_type == 'INSTANCE_SEGMENTATION':
+        return {
+            'task_type': task_type,
+            'model_name': model_name,
+            **({'bboxes': transformed_logits['bboxes']} if transformed_logits['bboxes'] is not None and len(transformed_logits['bboxes']) > 0 else {}),
+            **({'id': prediction_id} if prediction_id is not None else {}),
+            'metrics': transformed_logits['metrics'],
+        }
+    
 def _resolve_mc_drop_out_predictions(predictions):
     return {
         **({'encoded_logits': [p['encoded_logits'] for p in predictions]} if 'encoded_logits' in predictions[0] else {}),

@@ -9,7 +9,7 @@ import smart_open
 
 from dioptra.lake.utils import (
     wait_for_upload,
-    upload_to_lake_via_object_store,
+    upload_to_lake,
     _resolve_mc_drop_out_predictions,
     store_to_local_cache
 )
@@ -25,7 +25,7 @@ class InferenceRunner():
         if self.use_local_storage:
             self.uploads.append(store_to_local_cache(records))
         else:
-            self.uploads.append(upload_to_lake_via_object_store(records))
+            self.uploads.append(upload_to_lake(records))
 
     def wait_for_uploads(self):
         with ThreadPoolExecutor() as executor:

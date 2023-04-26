@@ -104,8 +104,11 @@ class ImageDataset(Dataset):
             return
 
         if self.use_caching and os.path.exists(cached_object_path):
-            with open(cached_object_path, 'rb') as file:
-                return pickle.load(file)
+            try:
+                with open(cached_object_path, 'rb') as file:
+                    return pickle.load(file)
+            except EOFError:
+                print(f'Error while loading {field}, will reprocess it')
 
         object_transformed = field_transform(field)
         with open(cached_object_path, 'wb') as file:
