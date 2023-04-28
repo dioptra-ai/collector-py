@@ -141,8 +141,13 @@ class TorchInferenceRunner(InferenceRunner):
 
                 transformed_logits = None
                 if logits is not None and self.logits_transform is not None:
-                    transformed_logits = self.logits_transform(logits, embeddings,
-                                    metadata = self.datapoints_metadata[batch_global_idx*dataloader.batch_size:(batch_global_idx+1)*dataloader.batch_size])
+                    if self.datapoints_metadata:
+                        transformed_logits = self.logits_transform(logits, embeddings,
+                                    metadata = self.datapoints_metadata[batch_global_idx:batch_global_idx+len(batch)])
+
+                    else:
+                        transformed_logits = self.logits_transform(logits, embeddings, 
+                                                                   metadata = None)
                     logits = None
 
                 for batch_idx, _ in enumerate(batch):
@@ -184,7 +189,7 @@ class TorchInferenceRunner(InferenceRunner):
                     logits=logits[record_batch_idx] if logits is not None else None,
                     transformed_logits=transformed_logits[record_batch_idx] if transformed_logits is not None else None,
                     grad_embeddings=grad_embeddings[record_batch_idx] if grad_embeddings is not None else None,
-                    embeddings=embeddings,
+                    embeddings=record_embeddings,
                     task_type=self.model_type,
                     model_name=self.model_name,
                     class_names=self.class_names,
