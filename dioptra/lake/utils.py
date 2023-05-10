@@ -691,20 +691,27 @@ def _format_prediction(
         return {
             'task_type': task_type,
             'model_name': model_name,
-            **({'lanes': transformed_logits['lanes']} if transformed_logits['lanes'] is not None and len(transformed_logits['lanes']) > 0 else {}),
+            **({'lanes': transformed_logits['lanes']} if transformed_logits is not None \
+                                                        and 'lanes' in transformed_logits \
+                                                        and transformed_logits['lanes'] is not None \
+                                                        and len(transformed_logits['lanes']) > 0 else {}),
             **({'embeddings': my_embeddings} if my_embeddings is not None and len(my_embeddings) > 0 else {}),
-            **({'grad_embeddings': my_grad_embeddings} if my_grad_embeddings is not None and len(my_grad_embeddings) > 0 else {}),
+            **({'grad_embeddings': my_grad_embeddings} if my_grad_embeddings is not None \
+                                                        and len(my_grad_embeddings) > 0 else {}),
             **({'id': prediction_id} if prediction_id is not None else {})
         }
     if task_type == 'INSTANCE_SEGMENTATION':
         return {
             'task_type': task_type,
             'model_name': model_name,
-            **({'bboxes': transformed_logits['bboxes']} if transformed_logits['bboxes'] is not None and len(transformed_logits['bboxes']) > 0 else {}),
+            **({'bboxes': transformed_logits['bboxes']} if transformed_logits is not None \
+                                                        and 'bboxes' in transformed_logits \
+                                                        and transformed_logits['bboxes'] is not None \
+                                                        and len(transformed_logits['bboxes']) > 0 else {}),
             **({'id': prediction_id} if prediction_id is not None else {}),
             'metrics': transformed_logits['metrics'],
         }
-    
+
 def _resolve_mc_drop_out_predictions(predictions):
     return {
         **({'encoded_logits': [p['encoded_logits'] for p in predictions]} if 'encoded_logits' in predictions[0] else {}),

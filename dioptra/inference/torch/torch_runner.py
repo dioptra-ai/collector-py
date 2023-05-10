@@ -112,10 +112,23 @@ class TorchInferenceRunner(InferenceRunner):
             dataset_size = len(dataloader.dataset) # we are using a dataloader
         else:
             dataset_size = len(dataloader)  # we are using a dataset directly
+
         for _, batch in tqdm(enumerate(dataloader), desc='running inference...'):
+
             if self.data_transform:
                 batch = self.data_transform(batch)
-            batch = batch.to(self.device)
+
+            batch_size = 1
+            if hasattr(batch, 'keys'):
+                for key in batch.keys():
+                    batch[key] = batch[key].to(self.device)
+                    if hasattr(batch[key], 'shape'):
+                        batch_size = batch[key].shape[0]
+            else:
+                batch = batch.to(self.device)
+                if hasattr(batch, 'shape'):
+                    batch_size = batch.shape[0]
+
             samples_records = []
 
             for _ in range(nb_samples):
@@ -123,7 +136,11 @@ class TorchInferenceRunner(InferenceRunner):
                 batch_records = []
                 with torch.no_grad() if self.grad_embeddings_transform is None else torch.enable_grad():
                     self.model.zero_grad()
-                    self.model(batch, **self.forward_kwargs)
+
+                    if hasattr(batch, 'keys'):
+                        self.model(**batch, **self.forward_kwargs)
+                    else:
+                        self.model(batch, **self.forward_kwargs)
 
                 embeddings = {}
                 for my_layer in self.embeddings_layers:
@@ -143,25 +160,25 @@ class TorchInferenceRunner(InferenceRunner):
                 if logits is not None and self.logits_transform is not None:
                     if self.datapoints_metadata:
                         transformed_logits = self.logits_transform(logits, embeddings,
-                                    metadata = self.datapoints_metadata[batch_global_idx:batch_global_idx+len(batch)])
+                                    metadata = self.datapoints_metadata[batch_global_idx:batch_global_idx + batch_size])
 
                     else:
-                        transformed_logits = self.logits_transform(logits, embeddings, 
+                        transformed_logits = self.logits_transform(logits, embeddings,
                                                                    metadata = None)
                     logits = None
 
-                for batch_idx, _ in enumerate(batch):
+                for batch_idx in range(batch_size):
                     batch_records.extend(self._build_records(
                         logits=logits, transformed_logits=transformed_logits,
                         grad_embeddings=grad_embeddings, embeddings=embeddings,
-                        record_batch_idx=batch_idx, record_global_idx=global_idx))
+                        record_batch_idx=batch_idx, record_global_idx=batch_global_idx))
                     batch_global_idx += 1
                 samples_records.append(batch_records)
 
             resolved_records = self._resolve_records(samples_records)
             records.extend(resolved_records)
 
-            global_idx += len(batch)
+            global_idx += batch_size
 
             if len(records) > self.max_batch_size:
                 self._ingest_data(records)
@@ -180,13 +197,14 @@ class TorchInferenceRunner(InferenceRunner):
             datapoint_id = self.datapoint_ids[record_global_idx]
 
         record_embeddings = {}
+
         for my_layer in embeddings:
             record_embeddings[my_layer] = embeddings[my_layer][record_batch_idx]
 
         return [{
             **({
                 'prediction': _format_prediction(
-                    logits=logits[record_batch_idx] if logits is not None else None,
+                    logits=logits[record_batch_idx] if logits is not None else [],
                     transformed_logits=transformed_logits[record_batch_idx] if transformed_logits is not None else None,
                     grad_embeddings=grad_embeddings[record_batch_idx] if grad_embeddings is not None else None,
                     embeddings=record_embeddings,

@@ -153,6 +153,7 @@ class ImageDataset(Dataset):
                     'uri' not in processed_row['metadata'] or \
                     'width' not in processed_row['metadata'] or \
                     'height' not in processed_row['metadata']:
+                print('Skipping datapoint as it does not have the required fields: image, polygons, metadata.uri, metadata.width, metadata.height')
                 return
 
             datapoint_hash = hashlib.md5(processed_row['metadata']['uri'].encode()).hexdigest()
