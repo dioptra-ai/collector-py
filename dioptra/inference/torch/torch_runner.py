@@ -174,6 +174,9 @@ class TorchInferenceRunner(InferenceRunner):
                         record_batch_idx=batch_idx, record_global_idx=batch_global_idx))
                     batch_global_idx += 1
                 samples_records.append(batch_records)
+                del logits
+                del grad_embeddings
+                del transformed_logits
 
             resolved_records = self._resolve_records(samples_records)
             records.extend(resolved_records)
@@ -217,7 +220,7 @@ class TorchInferenceRunner(InferenceRunner):
             ),
             **({'id': datapoint_id} if datapoint_id is not None else {}),
             **(self.datapoints_metadata[record_global_idx] \
-               if self.datapoints_metadata and len(self.datapoints_metadata) > record_global_idx else {}
+               if self.datapoints_metadata and len(self.datapoints_metadata) > (record_global_idx) else {}
             ),
             **(self.dataset_metadata if self.dataset_metadata else {})
         }]
