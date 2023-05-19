@@ -11,12 +11,13 @@ class WeightedEntropyMiner(BaseMiner):
             self, display_name, size, select_filters, model_name=None,
             select_limit=None, select_order_by=None, select_desc=None):
         """
-        Entropy miner
-        Will perform a AL query based on Entropy
+        Weighted entropy miner
+        Will perform a AL query based on Weighted Entropy
 
         Parameters:
             display_name: name to be displayed in Dioptra
             size: number of datapoints to query
+            model_name: name of the model to get the prediction from. The model name should include the layer name with the format model_name:layer_name
             select_filters: dioptra style filters to select the data to be queried from
             select_limit: limit to selected the data
             select_order_by: field to use to sort the data to control how limit is performed

@@ -21,6 +21,7 @@ class ActivationMiner(BaseMiner):
         Parameters:
             display_name: name to be displayed in Dioptra
             size: number of datapoints to query
+            model_name: name of the model to get the prediction from. The model name should include the layer name with the format model_name:layer_name
             embeddings_field: embedding fields to run the analysis on. Could be 'embeddings' or 'logits'
             select_filters: dioptra style filters to select the data to be queried from
             select_limit: limit to selected the data
