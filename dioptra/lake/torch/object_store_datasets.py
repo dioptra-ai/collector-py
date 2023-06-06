@@ -175,7 +175,7 @@ class ImageDataset(Dataset):
                     continue
                 class_index = class_names.index(polygon['class_name'])
                 normalized_polygon = [
-                    str(value / img_width) if index % 2 else str(value / img_height) for index, value in enumerate(polygon['coco_polygon'])]
+                    str(value / img_height) if index % 2 else str(value / img_width) for index, value in enumerate(polygon['coco_polygon'])]
                 with open(os.path.join(path, 'labels' , datapoint_name + '.txt'), 'a') as file:
                     file.write(f'{class_index} {" ".join(normalized_polygon)}\n')
 
