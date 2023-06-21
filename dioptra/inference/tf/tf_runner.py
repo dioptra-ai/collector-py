@@ -23,12 +23,18 @@ class TfInferenceRunner(InferenceRunner):
         Parameters:
             model: model to be used to inference
             model_name: the name of the model
-            model_type: the type of the model use. Can be CLASSIFICATION or SEGMENTATION
+            model_type: the type of the model use. Can be one of:
+                - CLASSIFICATION
+                - INSTANCE_SEGMENTATION
+                - SEGMENTATION
+                - OBJECT_DETECTION
+                - LANE_DETECTION
+                - COMPLETION
             datapoint_ids: alist of datapoints to update with the predictions. Should be in the same order as the dataset.
             embeddings_layers: an array of layer names that should be used as embeddings
             logits_layer: the name of the logit layer (pre softmax) to be used for AL
             class_names: the class names corresponding to each logit. Indexes should match the logit layer
-            datapoints_metadata: a list of dioptra style datapoints metadata to be added to teh datapoints. The indexes in this list should match the indexes in the dataset
+            datapoints_metadata: a list of dioptra style datapoints metadata to be added to the datapoints. The indexes in this list should match the indexes in the dataset
             dataset_metadata: a dioptra style dataset metadata to be added to the dataset
             channel_last: if the model expects the data to be in channel last format
         """

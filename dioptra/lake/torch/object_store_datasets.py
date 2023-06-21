@@ -90,6 +90,13 @@ class ImageDataset(Dataset):
                                 **({'coco_polygon': lane['coco_polygon']} if lane is not None and 'coco_polygon' in lane and lane['coco_polygon'] is not None else {})
                             } for lane in groundtruth['lanes']]
                     break
+                if groundtruth['task_type'] == 'COMPLETION':
+                    if 'completions' in groundtruth and groundtruth['completions'] is not None:
+                        row['completions'] = [
+                            {
+                                **({'text': completion['text']} if completion is not None and 'text' in completion and completion['text'] is not None else {}),
+                            } for completion in groundtruth['completions']]
+                    break
 
         if self.transform is not None and not is_prefetch:
             return self.transform(row)

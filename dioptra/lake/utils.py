@@ -587,7 +587,7 @@ def _format_groundtruth(groundtruth, task_type, class_names=None, groundtruth_id
 
     Parameters:
         groundtruth: the groundtruth field
-        task_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
+        task_type: the type of gt. Supported types CLASSIFICATION, SEMANTIC_SEGMENTATION
         class_names: a list of class names. If the groundtruth contains indexes, it will be used to convert them to names
 
     """
@@ -626,7 +626,13 @@ def _format_prediction(
     Parameters:
         logits: the prediction logits (before softmax)
         embeddings: a dictionary containing the embeddings by layer names, or a single embeddings vector.
-        task_type: the type of gt. Supported types CLASSIFICATION, SEGMENTATION
+        task_type: the type of gt. Supported types
+                - CLASSIFICATION
+                - SEGMENTATION
+                - INSTANCE_SEGMENTATION
+                - OBJECT_DETECTION
+                - LANE_DETECTION
+                - COMPLETION
         class_names: a list of class names.
             If the groundtruth contains indexes, it will be used to convert them to names
         prediction_id: the id of the prediction to be updated
@@ -710,6 +716,20 @@ def _format_prediction(
                                                         and len(transformed_logits['bboxes']) > 0 else {}),
             **({'id': prediction_id} if prediction_id is not None else {}),
             'metrics': transformed_logits['metrics'],
+        }
+    
+    if task_type == 'COMPLETION':
+        return {
+            'task_type': task_type,
+            'model_name': model_name,
+            **({'completions': transformed_logits['completions']} if transformed_logits is not None \
+                                                        and 'completions' in transformed_logits \
+                                                        and transformed_logits['completions'] is not None \
+                                                        and len(transformed_logits['completions']) > 0 else {}),
+            **({'embeddings': my_embeddings} if my_embeddings is not None and len(my_embeddings) > 0 else {}),
+            **({'grad_embeddings': my_grad_embeddings} if my_grad_embeddings is not None \
+                                                        and len(my_grad_embeddings) > 0 else {}),
+            **({'id': prediction_id} if prediction_id is not None else {})
         }
 
 def _resolve_mc_drop_out_predictions(predictions):
