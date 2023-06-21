@@ -28,7 +28,13 @@ class TorchInferenceRunner(InferenceRunner):
         Parameters:
             model: model to be used to inference
             model_name: the name of the model
-            model_type: the type of the model use. Can be CLASSIFICATION or SEGMENTATION
+            model_type: the type of the model use. Can be one of:
+                - CLASSIFICATION
+                - INSTANCE_SEGMENTATION
+                - SEGMENTATION
+                - OBJECT_DETECTION
+                - LANE_DETECTION
+                - COMPLETION
             datapoint_ids: alist of datapoints to update with the predictions. Should be in the same order as the dataset.
             embeddings_layers: an array of layer names that should be used as embeddings
             logits_layer: the name of the logit layer (pre softmax) to be used for AL
